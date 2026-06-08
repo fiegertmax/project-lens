@@ -24,6 +24,8 @@ The repository currently contains only planning docs (README.md, project-descrip
 - Separate concerns cleanly: data loading/parsing, visualization rendering, and interaction/UI logic belong in distinct modules, not mixed within one class or file
 - Keep methods brief, single-purpose, and easy to read at a glance
 - Apply established design patterns where they genuinely fit (e.g. strategy for interchangeable lens computations, observer for selection/filter state, factory for chart construction) — don't force a pattern where a simple function suffices
+- For each feature request, try to find the best possible solution
+- If you are uncertain, perform web research on the problem
 
 ## Documentation style
 
