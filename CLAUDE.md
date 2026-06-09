@@ -40,3 +40,4 @@ The repository currently contains only planning docs (README.md, project-descrip
 ## Implementation rationale
 
 - when prompted to adjust the visualization in any way that introduces a new variable, always check if the variable is available in the dataset in order to potentially minimize own calculations
+- when prompted with a big task such as implementing a new feature or adjusting the visualization or lens effect in a non-trivial way, always think about the task in planning mode first in order to ensure clean implementation
