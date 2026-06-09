@@ -2,13 +2,18 @@ import { ChartStack } from './charts/ChartStack';
 import {
   DATA_URL,
   DEFAULT_COUNTRIES,
+  DEFAULT_LENS_EFFECT,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
+  EXTRA_COLUMNS,
+  LENS_WIDTH,
 } from './config';
 import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
+import { LensState } from './state/LensState';
 import { ConfigPanel } from './ui/ConfigPanel';
+import { LensPanel } from './ui/LensPanel';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
 export class App {
@@ -20,17 +25,24 @@ export class App {
 
   async start(): Promise<void> {
     this.root.innerHTML = '<p class="app__loading">Loading emissions data…</p>';
-    const dataset = await EmissionsDataset.load(DATA_URL, DEFAULT_METRIC);
+    const dataset = await EmissionsDataset.load(DATA_URL, DEFAULT_METRIC, EXTRA_COLUMNS);
 
     const bounds = this.clampBounds(dataset.yearExtent());
-    const state = new AppState(DEFAULT_COUNTRIES, this.clampRange(bounds));
+    const range = this.clampRange(bounds);
+    const state = new AppState(DEFAULT_COUNTRIES, range);
+    const lens = new LensState(
+      DEFAULT_LENS_EFFECT,
+      LENS_WIDTH.default,
+      Math.round((range[0] + range[1]) / 2),
+    );
 
-    this.render(dataset, state, bounds);
+    this.render(dataset, state, lens, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
+    lens: LensState,
     bounds: YearRange,
   ): void {
     this.root.innerHTML = '';
@@ -43,9 +55,11 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds);
-    const charts = new ChartStack(main, dataset, state, DEFAULT_METRIC);
+    new LensPanel(sidebar, lens);
+    const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
 
     state.subscribe(() => charts.update());
+    lens.subscribe(() => charts.update());
     window.addEventListener('resize', () => charts.update());
     charts.update();
   }

@@ -2,6 +2,8 @@
 export interface RawPoint {
   year: number;
   value: number;
+  /** Auxiliary columns (e.g. population) keyed by name; NaN when missing. */
+  extra: Record<string, number>;
 }
 
 /** A point ready for rendering. isMissing marks interpolated (gap-filled) years. */

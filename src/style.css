@@ -8,6 +8,9 @@
   --accent-soft: rgba(170, 59, 255, 0.12);
   --line: #aa3bff;
   --missing: #e08a00;
+  --lens: #0d9488;
+  --lens-fill: rgba(13, 148, 136, 0.16);
+  --lens-border: rgba(13, 148, 136, 0.55);
 
   font: 15px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
@@ -258,4 +261,111 @@ body {
 
 .line-chart__svg text {
   fill: var(--text-muted);
+}
+
+.line-chart__y-title {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Lens: on-visualization country selection */
+.line-chart__select {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.line-chart__select:hover {
+  fill: var(--accent-soft);
+}
+
+.line-chart__select--target {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* Lens: active band + derived line (emphasized, distinct saturated colour) */
+.lens-band {
+  fill: var(--lens-fill);
+  stroke: var(--lens-border);
+  stroke-width: 1;
+  cursor: ew-resize;
+}
+
+.lens-line {
+  fill: none;
+  stroke: var(--lens);
+  stroke-width: 2.5;
+  pointer-events: none;
+}
+
+.lens-label {
+  fill: var(--lens);
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Lens panel controls */
+.lens-panel__effects {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.lens-panel__effect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.lens-panel__width {
+  margin-bottom: 12px;
+}
+
+.lens-panel__width-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lens-panel__width input {
+  width: 100%;
+}
+
+.lens-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.lens-panel__button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.lens-panel__button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lens-panel__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lens-panel__button--hidden {
+  display: none;
+}
+
+.lens-panel__status {
+  color: var(--text-muted);
+  font-size: 13px;
 }

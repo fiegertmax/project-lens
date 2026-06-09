@@ -1,14 +1,43 @@
-import { axisBottom, axisLeft, extent, format, line, scaleLinear, select } from 'd3';
-import type { ScaleLinear, Selection } from 'd3';
+import {
+  axisBottom,
+  axisLeft,
+  drag,
+  extent,
+  format,
+  line,
+  scaleLinear,
+  select,
+} from 'd3';
+import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { DataPoint, MetricDefinition } from '../data/types';
+import type { DerivedPoint } from '../lens/effects';
 import type { YearRange } from '../state/AppState';
 
-const MARGIN = { top: 12, right: 24, bottom: 28, left: 64 };
+const MARGIN = { top: 12, right: 24, bottom: 28, left: 72 };
 const HEIGHT = 200;
 const YEAR_FORMAT = format('d');
 
 type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
+type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
+
+/** What the stack tells a chart to draw for the lens this render cycle. */
+export interface LensRenderContext {
+  phase: 'selecting' | 'active';
+  isTarget: boolean;
+  window: YearRange;
+  derived: DerivedPoint[];
+  unit: string;
+  onToggle(): void;
+  onSetCenter(year: number): void;
+  onResizeBy(deltaYears: number): void;
+}
+
+interface ChartGeometry {
+  x: LinearScale;
+  innerW: number;
+  innerH: number;
+}
 
 /** Renders one country's time-series as a standalone, self-scaled line chart. */
 export class LineChart {
@@ -17,6 +46,9 @@ export class LineChart {
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
+  private geometry?: ChartGeometry;
+  /** Active resize handler while the lens is on this chart; null otherwise. */
+  private onLensResize: ((deltaYears: number) => void) | null = null;
 
   constructor(parent: HTMLElement, country: string, metric: MetricDefinition) {
     this.country = country;
@@ -30,6 +62,9 @@ export class LineChart {
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+    this.svg.node()!.addEventListener('wheel', (e) => this.onWheel(e), {
+      passive: false,
+    });
   }
 
   /** Re-render for the current data and shared year domain. */
@@ -46,10 +81,19 @@ export class LineChart {
       .nice()
       .range([innerH, 0]);
 
+    this.geometry = { x, innerW, innerH };
     this.renderAxes(x, y, innerH);
     this.renderLine(points, x, y);
     this.renderDots(points, x, y);
     this.renderEmptyNotice(points, innerW, innerH);
+  }
+
+  /** Draw (or clear) the lens overlay for this chart. Call after update. */
+  applyLens(ctx: LensRenderContext | null): void {
+    if (!this.geometry) return;
+    this.onLensResize = ctx?.phase === 'active' && ctx.isTarget ? ctx.onResizeBy : null;
+    this.renderSelectOverlay(ctx);
+    this.renderActiveLens(ctx);
   }
 
   /** Root element, used by the stack to enforce display order. */
@@ -72,6 +116,19 @@ export class LineChart {
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
     this.group('y-axis').call(axisLeft(y).ticks(5));
+    this.renderYTitle(innerH);
+  }
+
+  /** Rotated label naming the variable shown on the y-axis. */
+  private renderYTitle(innerH: number): void {
+    this.group('y-title')
+      .selectAll<SVGTextElement, string>('text')
+      .data([`${this.metric.label} (${this.metric.unit})`])
+      .join('text')
+      .attr('class', 'line-chart__y-title')
+      .attr('transform', `translate(${-MARGIN.left + 14},${innerH / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .text((d) => d);
   }
 
   private renderLine(points: DataPoint[], x: LinearScale, y: LinearScale): void {
@@ -146,8 +203,100 @@ export class LineChart {
     return `${point.year}: ${value} ${this.metric.unit}${note}`;
   }
 
+  /** Transparent click target shown on every chart while selecting targets. */
+  private renderSelectOverlay(ctx: LensRenderContext | null): void {
+    const { innerW, innerH } = this.geometry!;
+    const data = ctx?.phase === 'selecting' ? [ctx] : [];
+    this.group('lens-select')
+      .selectAll<SVGRectElement, LensRenderContext>('rect')
+      .data(data)
+      .join('rect')
+      .attr('class', (d) =>
+        d.isTarget
+          ? 'line-chart__select line-chart__select--target'
+          : 'line-chart__select',
+      )
+      .attr('width', innerW)
+      .attr('height', innerH)
+      .on('click', (_event, d) => d.onToggle());
+  }
+
+  /** The draggable, resizable lens band + its derived line, on targets only. */
+  private renderActiveLens(ctx: LensRenderContext | null): void {
+    const { x, innerH } = this.geometry!;
+    const show = ctx?.phase === 'active' && ctx.isTarget;
+    const layer = this.group('lens-active');
+    const data = show && ctx ? [ctx] : [];
+
+    const band = layer
+      .selectAll<SVGRectElement, LensRenderContext>('rect.lens-band')
+      .data(data)
+      .join('rect')
+      .attr('class', 'lens-band')
+      .attr('x', (d) => x(d.window[0]))
+      .attr('y', 0)
+      .attr('width', (d) => x(d.window[1]) - x(d.window[0]))
+      .attr('height', innerH);
+    band.call(this.dragBand());
+
+    this.renderLensLine(layer, data);
+    this.renderLensLabel(layer, data);
+  }
+
+  private renderLensLine(layer: PlotLayer, data: LensRenderContext[]): void {
+    const { x, innerH } = this.geometry!;
+    layer
+      .selectAll<SVGPathElement, LensRenderContext>('path.lens-line')
+      .data(data.filter((d) => d.derived.length > 0))
+      .join('path')
+      .attr('class', 'lens-line')
+      .attr('d', (d) => {
+        const ly = scaleLinear()
+          .domain(this.derivedDomain(d.derived))
+          .range([innerH, 0]);
+        return line<DerivedPoint>()
+          .x((p) => x(p.year))
+          .y((p) => ly(p.value))(d.derived);
+      });
+  }
+
+  private renderLensLabel(layer: PlotLayer, data: LensRenderContext[]): void {
+    const { x } = this.geometry!;
+    layer
+      .selectAll<SVGTextElement, LensRenderContext>('text.lens-label')
+      .data(data)
+      .join('text')
+      .attr('class', 'lens-label')
+      .attr('x', (d) => x(d.window[0]) + 4)
+      .attr('y', 12)
+      .text((d) => d.unit);
+  }
+
+  private dragBand() {
+    return drag<SVGRectElement, LensRenderContext>()
+      .container(() => this.plot.node()!)
+      .on('drag', (event: D3DragEvent<SVGRectElement, LensRenderContext, unknown>, d) =>
+        d.onSetCenter(this.geometry!.x.invert(event.x)),
+      );
+  }
+
+  private derivedDomain(derived: DerivedPoint[]): [number, number] {
+    const [min, max] = extent(derived, (d) => d.value);
+    if (min === undefined || max === undefined) return [0, 1];
+    const lo = Math.min(0, min);
+    const hi = Math.max(0, max);
+    return lo === hi ? [lo, hi + 1] : [lo, hi];
+  }
+
+  /** Ctrl/⌘ + wheel (and trackpad pinch) resizes the active lens. */
+  private onWheel(event: WheelEvent): void {
+    if (!this.onLensResize || !(event.ctrlKey || event.metaKey)) return;
+    event.preventDefault();
+    this.onLensResize(event.deltaY > 0 ? -1 : 1);
+  }
+
   /** Idempotently fetch (or create) a named plot layer group. */
-  private group(name: string) {
+  private group(name: string): PlotLayer {
     return this.plot
       .selectAll<SVGGElement, null>(`g.${name}`)
       .data([null])

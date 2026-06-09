@@ -1,4 +1,5 @@
 import type { MetricDefinition, MetricKey } from './data/types';
+import type { LensEffectKey } from './lens/effects';
 
 /** Runtime URL of the dataset, served from public/. */
 export const DATA_URL = `${import.meta.env.BASE_URL}data/owid-co2-data.csv`;
@@ -26,3 +27,11 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
 };
 
 export const DEFAULT_METRIC: MetricDefinition = METRICS.co2;
+
+/** Auxiliary columns retained for lens effects (e.g. per-capita). */
+export const EXTRA_COLUMNS: readonly string[] = ['population'];
+
+/** Lens window width bounds and default, in years. */
+export const LENS_WIDTH = { min: 3, max: 40, default: 10 };
+
+export const DEFAULT_LENS_EFFECT: LensEffectKey = 'growth-rate';

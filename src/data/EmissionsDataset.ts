@@ -16,13 +16,16 @@ export class EmissionsDataset {
     this.extent = EmissionsDataset.computeYearExtent(byCountry);
   }
 
-  /** Fetch the CSV and index it by country for the given metric. */
+  /** Fetch the CSV and index it by country for the metric plus extra columns. */
   static async load(
     url: string,
     metric: MetricDefinition,
+    extraColumns: readonly string[] = [],
   ): Promise<EmissionsDataset> {
     const rows = await csv(url);
-    return new EmissionsDataset(EmissionsDataset.index(rows, metric));
+    return new EmissionsDataset(
+      EmissionsDataset.index(rows, metric, extraColumns),
+    );
   }
 
   /** All entity names, sorted alphabetically. */
@@ -43,6 +46,7 @@ export class EmissionsDataset {
   private static index(
     rows: DSVRowString[],
     metric: MetricDefinition,
+    extraColumns: readonly string[],
   ): Map<string, CountrySeries> {
     const byCountry = new Map<string, CountrySeries>();
     for (const row of rows) {
@@ -51,7 +55,11 @@ export class EmissionsDataset {
       if (!country || !Number.isFinite(year)) continue;
 
       const series = EmissionsDataset.ensureSeries(byCountry, country);
-      series.points.push({ year, value: EmissionsDataset.parse(row, metric) });
+      series.points.push({
+        year,
+        value: EmissionsDataset.parse(row, metric.column),
+        extra: EmissionsDataset.parseExtra(row, extraColumns),
+      });
     }
     for (const series of byCountry.values()) {
       series.points.sort((a, b) => a.year - b.year);
@@ -72,9 +80,18 @@ export class EmissionsDataset {
   }
 
   /** Empty cells become NaN so missing years can be detected downstream. */
-  private static parse(row: DSVRowString, metric: MetricDefinition): number {
-    const raw = row[metric.column];
+  private static parse(row: DSVRowString, column: string): number {
+    const raw = row[column];
     return raw === undefined || raw === '' ? NaN : Number(raw);
+  }
+
+  private static parseExtra(
+    row: DSVRowString,
+    columns: readonly string[],
+  ): Record<string, number> {
+    const extra: Record<string, number> = {};
+    for (const column of columns) extra[column] = EmissionsDataset.parse(row, column);
+    return extra;
   }
 
   private static computeYearExtent(
