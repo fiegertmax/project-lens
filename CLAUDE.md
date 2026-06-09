@@ -36,3 +36,7 @@ The repository currently contains only planning docs (README.md, project-descrip
 
 - after implementation, always run 'npm run build' in order to verify the project builds - never mark a task as finished when the project does not build
 - if you ever start the project, ensure you shut it down properly afterwards - ensure I never get an error on startup because the port is taken
+
+## Implementation rationale
+
+- when prompted to adjust the visualization in any way that introduces a new variable, always check if the variable is available in the dataset in order to potentially minimize own calculations
