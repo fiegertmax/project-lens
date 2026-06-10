@@ -5,7 +5,7 @@ import type { DerivedPoint } from '../lens/effects';
 import type { AppState, YearRange } from '../state/AppState';
 import type { LensState } from '../state/LensState';
 import { resolveSeries } from '../utils/interpolation';
-import type { LensRenderContext } from './LineChart';
+import type { LensControl, LensRenderContext } from './LineChart';
 import { LineChart } from './LineChart';
 
 /** Vertical, scrollable stack of one LineChart per selected country. */
@@ -16,6 +16,8 @@ export class ChartStack {
   private readonly state: AppState;
   private readonly lens: LensState;
   private readonly metric: MetricDefinition;
+  /** Guards against re-entrant renders when pruning targets notifies mid-update. */
+  private rendering = false;
 
   constructor(
     parent: HTMLElement,
@@ -35,6 +37,16 @@ export class ChartStack {
 
   /** Reconcile charts with the current selection, year range, and lens. */
   update(): void {
+    if (this.rendering) return;
+    this.rendering = true;
+    try {
+      this.render();
+    } finally {
+      this.rendering = false;
+    }
+  }
+
+  private render(): void {
     const countries = this.state.selectedCountries().sort((a, b) =>
       a.localeCompare(b),
     );
@@ -53,7 +65,17 @@ export class ChartStack {
       this.container.appendChild(chart.node()); // re-append enforces order
       const ctx = this.lensContext(country, yearRange, window, derived, sharedDomain);
       chart.applyLens(ctx);
+      chart.setLensControl(this.lensControl(country));
     }
+  }
+
+  /** Header +/− toggle for a displayed country, or null when the lens is off. */
+  private lensControl(country: string): LensControl | null {
+    if (this.lens.currentPhase() !== 'active') return null;
+    return {
+      isTarget: this.lens.isTarget(country),
+      onToggle: () => this.lens.toggleTarget(country),
+    };
   }
 
   /** Derived lens series for every active target, keyed by country. */
@@ -90,6 +112,7 @@ export class ChartStack {
     return found ? [min, max] : undefined;
   }
 
+  /** A render context only for countries the active lens currently targets. */
   private lensContext(
     country: string,
     yearRange: YearRange,
@@ -97,22 +120,16 @@ export class ChartStack {
     derived: Map<string, DerivedPoint[]>,
     sharedDomain: [number, number] | undefined,
   ): LensRenderContext | null {
-    const phase = this.lens.currentPhase();
-    if (phase === 'idle') return null;
-
-    const isTarget = this.lens.isTarget(country);
-    if (phase === 'active' && !isTarget) return null;
+    if (this.lens.currentPhase() !== 'active' || !this.lens.isTarget(country))
+      return null;
 
     const effect = LENS_EFFECTS[this.lens.currentEffect()];
     return {
-      phase,
-      isTarget,
       window,
       derived: derived.get(country) ?? [],
       sharedDomain,
       label: effect.label,
       unit: effect.unit,
-      onToggle: () => this.lens.toggleTarget(country),
       onSetCenter: (year) => this.lens.setCenter(this.clampCenter(year, yearRange)),
       onResizeBy: (delta) => this.lens.setWidth(this.lens.currentWidth() + delta),
     };
@@ -145,6 +162,8 @@ export class ChartStack {
       if (keep.has(country)) continue;
       chart.destroy();
       this.charts.delete(country);
+      // A removed chart can't be lensed — drop any stale target.
+      if (this.lens.isTarget(country)) this.lens.toggleTarget(country);
     }
   }
 

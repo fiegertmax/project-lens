@@ -1,7 +1,7 @@
 import { LENS_WIDTH } from '../config';
 import type { LensEffectKey } from '../lens/effects';
 
-export type LensPhase = 'idle' | 'selecting' | 'active';
+export type LensPhase = 'idle' | 'active';
 
 type Listener = () => void;
 
@@ -11,7 +11,8 @@ export class LensState {
   private effectKey: LensEffectKey;
   private width: number;
   private center: number;
-  private comparison = false;
+  /** On by default: selecting multiple lens targets should be comparable immediately. */
+  private comparison = true;
   private readonly targets = new Set<string>();
   private readonly listeners = new Set<Listener>();
 
@@ -74,29 +75,23 @@ export class LensState {
     this.notify();
   }
 
-  /** Enter country-selection mode. */
-  start(): void {
-    this.phase = 'selecting';
+  /** Arm the lens: countries can now be lensed individually via the selector. */
+  apply(): void {
+    this.phase = 'active';
     this.notify();
   }
 
+  /** Lens (or un-lens) a single country; only meaningful while active. */
   toggleTarget(country: string): void {
     if (this.targets.has(country)) this.targets.delete(country);
     else this.targets.add(country);
     this.notify();
   }
 
-  /** Activate the draggable lens (requires at least one target). */
-  activate(): void {
-    if (this.targets.size === 0) return;
-    this.phase = 'active';
-    this.notify();
-  }
-
   /** Tear the lens down and clear the on-visualization selection. */
   reset(): void {
     this.phase = 'idle';
-    this.comparison = false;
+    this.comparison = true;
     this.targets.clear();
     this.notify();
   }

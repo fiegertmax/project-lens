@@ -26,6 +26,8 @@ The repository currently contains only planning docs (README.md, project-descrip
 - Apply established design patterns where they genuinely fit (e.g. strategy for interchangeable lens computations, observer for selection/filter state, factory for chart construction) — don't force a pattern where a simple function suffices
 - For each feature request, try to find the best possible solution
 - If you are uncertain, perform web research on the problem
+- When implementing a new feature or adjusting an existing one, always check whether you can efficiently reuse existing components or if you can implement new reusable components that can be applied to multiple features
+- When performing refactoring like mentioned in the prior bullet point and when adjusting an existing feature, always check whether the project contains any code that can be removed in order to omit duplicate or dead code
 
 ## Documentation style
 
@@ -40,5 +42,3 @@ The repository currently contains only planning docs (README.md, project-descrip
 ## Implementation rationale
 
 - when prompted to adjust the visualization in any way that introduces a new variable, always check if the variable is available in the dataset in order to potentially minimize own calculations
-- when prompted with a big task such as implementing a new feature or adjusting the visualization or lens effect in a non-trivial way, always think about the task in planning mode first in order to ensure clean implementation
-- if you are uncertain whether the plan matches the user's intentions, ask questions in order to clear out all insecurities before starting implementation

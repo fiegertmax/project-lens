@@ -23,19 +23,23 @@ type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 
-/** What the stack tells a chart to draw for the lens this render cycle. */
+/** What the stack tells a chart to draw for the lens this render cycle.
+ *  A non-null context means the lens is active on this country. */
 export interface LensRenderContext {
-  phase: 'selecting' | 'active';
-  isTarget: boolean;
   window: YearRange;
   derived: DerivedPoint[];
   /** Shared value domain across lensed countries; set only in comparison mode. */
   sharedDomain?: [number, number];
   label: string;
   unit: string;
-  onToggle(): void;
   onSetCenter(year: number): void;
   onResizeBy(deltaYears: number): void;
+}
+
+/** Header +/− toggle that lenses (or un-lenses) this country. */
+export interface LensControl {
+  isTarget: boolean;
+  onToggle(): void;
 }
 
 interface ChartGeometry {
@@ -52,6 +56,9 @@ export class LineChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
   private geometry?: ChartGeometry;
+  /** Header lens toggle; its handler is rebound each render via setLensControl. */
+  private readonly lensToggle: HTMLButtonElement;
+  private onToggle: (() => void) | null = null;
   /** Active resize handler while the lens is on this chart; null otherwise. */
   private onLensResize: ((deltaYears: number) => void) | null = null;
 
@@ -59,10 +66,7 @@ export class LineChart {
     this.country = country;
     this.metric = metric;
     this.root = select(parent).append('div').attr('class', 'line-chart');
-    this.root
-      .append('h3')
-      .attr('class', 'line-chart__title')
-      .text(this.country);
+    this.lensToggle = this.buildHeader();
     this.svg = this.root.append('svg').attr('class', 'line-chart__svg');
     this.plot = this.svg
       .append('g')
@@ -96,11 +100,33 @@ export class LineChart {
   /** Draw (or clear) the lens overlay for this chart. Call after update. */
   applyLens(ctx: LensRenderContext | null): void {
     if (!this.geometry) return;
-    const lensed = ctx?.phase === 'active' && ctx.isTarget;
-    this.onLensResize = lensed ? ctx!.onResizeBy : null;
-    this.root.classed('line-chart--lensed', lensed); // dims base line behind the lens
-    this.renderSelectOverlay(ctx);
+    this.onLensResize = ctx ? ctx.onResizeBy : null;
+    this.root.classed('line-chart--lensed', ctx !== null); // dims base line behind the lens
     this.renderActiveLens(ctx);
+  }
+
+  /** Show/update the header lens toggle; null hides it (lens not applied). */
+  setLensControl(control: LensControl | null): void {
+    this.onToggle = control?.onToggle ?? null;
+    const target = control?.isTarget ?? false;
+    this.lensToggle.classList.toggle('line-chart__lens-toggle--hidden', !control);
+    this.lensToggle.classList.toggle('line-chart__lens-toggle--on', target);
+    this.lensToggle.textContent = target ? '−' : '+';
+    this.lensToggle.title = target
+      ? `Remove lens from ${this.country}`
+      : `Apply lens to ${this.country}`;
+  }
+
+  /** Title row: name preceded by a +/− lens toggle (hidden until applied). */
+  private buildHeader(): HTMLButtonElement {
+    const title = this.root.append('h3').attr('class', 'line-chart__title');
+    const toggle = title
+      .append('button')
+      .attr('type', 'button')
+      .attr('class', 'line-chart__lens-toggle line-chart__lens-toggle--hidden')
+      .on('click', () => this.onToggle?.());
+    title.append('span').attr('class', 'line-chart__title-name').text(this.country);
+    return toggle.node()!;
   }
 
   /** Root element, used by the stack to enforce display order. */
@@ -210,30 +236,11 @@ export class LineChart {
     return `${point.year}: ${value} ${this.metric.unit}${note}`;
   }
 
-  /** Transparent click target shown on every chart while selecting targets. */
-  private renderSelectOverlay(ctx: LensRenderContext | null): void {
-    const { innerW, innerH } = this.geometry!;
-    const data = ctx?.phase === 'selecting' ? [ctx] : [];
-    this.group('lens-select')
-      .selectAll<SVGRectElement, LensRenderContext>('rect')
-      .data(data)
-      .join('rect')
-      .attr('class', (d) =>
-        d.isTarget
-          ? 'line-chart__select line-chart__select--target'
-          : 'line-chart__select',
-      )
-      .attr('width', innerW)
-      .attr('height', innerH)
-      .on('click', (_event, d) => d.onToggle());
-  }
-
   /** The draggable, resizable lens band, its derived line + right-hand axis. */
   private renderActiveLens(ctx: LensRenderContext | null): void {
     const { x, innerH } = this.geometry!;
-    const show = ctx?.phase === 'active' && ctx.isTarget;
     const layer = this.group('lens-active');
-    const data = show && ctx ? [ctx] : [];
+    const data = ctx ? [ctx] : [];
 
     layer
       .selectAll<SVGRectElement, LensRenderContext>('rect.lens-band')
@@ -247,7 +254,7 @@ export class LineChart {
       .call(this.dragBand());
 
     // one scale drives both the derived line and the secondary axis that reads it
-    const scale = show && ctx ? this.lensScale(ctx, innerH) : null;
+    const scale = ctx ? this.lensScale(ctx, innerH) : null;
     this.renderLensLine(layer, scale ? data : [], scale);
     this.renderLensAxis(scale ? ctx : null, scale);
   }
