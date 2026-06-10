@@ -1,6 +1,7 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-import type { CountrySeries, MetricDefinition } from '../data/types';
+import type { MetricDefinition } from '../data/types';
 import { LENS_EFFECTS } from '../lens/effects';
+import type { DerivedPoint } from '../lens/effects';
 import type { AppState, YearRange } from '../state/AppState';
 import type { LensState } from '../state/LensState';
 import { resolveSeries } from '../utils/interpolation';
@@ -41,19 +42,60 @@ export class ChartStack {
     this.renderEmptyHint(countries.length === 0);
 
     const yearRange = this.state.yearRange();
+    const window = this.lensWindow(yearRange);
+    const derived = this.deriveTargets(countries, window);
+    const sharedDomain = this.comparisonDomain(derived);
+
     for (const country of countries) {
       const chart = this.ensureChart(country);
       const series = this.dataset.series(country);
       chart.update(series ? resolveSeries(series, yearRange) : [], yearRange);
       this.container.appendChild(chart.node()); // re-append enforces order
-      chart.applyLens(this.lensContext(country, series, yearRange));
+      const ctx = this.lensContext(country, yearRange, window, derived, sharedDomain);
+      chart.applyLens(ctx);
     }
+  }
+
+  /** Derived lens series for every active target, keyed by country. */
+  private deriveTargets(
+    countries: string[],
+    window: YearRange,
+  ): Map<string, DerivedPoint[]> {
+    const derived = new Map<string, DerivedPoint[]>();
+    if (this.lens.currentPhase() !== 'active') return derived;
+    const effect = LENS_EFFECTS[this.lens.currentEffect()];
+    for (const country of countries) {
+      const series = this.dataset.series(country);
+      if (this.lens.isTarget(country) && series)
+        derived.set(country, effect.compute(series.points, window));
+    }
+    return derived;
+  }
+
+  /** Shared [min, max] across all lensed countries, or undefined when off/single. */
+  private comparisonDomain(
+    derived: Map<string, DerivedPoint[]>,
+  ): [number, number] | undefined {
+    if (!this.lens.comparisonEnabled() || derived.size < 2) return undefined;
+    let min = 0;
+    let max = 0;
+    let found = false;
+    for (const points of derived.values())
+      for (const { value } of points) {
+        if (!Number.isFinite(value)) continue;
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+        found = true;
+      }
+    return found ? [min, max] : undefined;
   }
 
   private lensContext(
     country: string,
-    series: CountrySeries | undefined,
     yearRange: YearRange,
+    window: YearRange,
+    derived: Map<string, DerivedPoint[]>,
+    sharedDomain: [number, number] | undefined,
   ): LensRenderContext | null {
     const phase = this.lens.currentPhase();
     if (phase === 'idle') return null;
@@ -62,17 +104,13 @@ export class ChartStack {
     if (phase === 'active' && !isTarget) return null;
 
     const effect = LENS_EFFECTS[this.lens.currentEffect()];
-    const window = this.lensWindow(yearRange);
-    const derived =
-      phase === 'active' && isTarget && series
-        ? effect.compute(series.points, window)
-        : [];
-
     return {
       phase,
       isTarget,
       window,
-      derived,
+      derived: derived.get(country) ?? [],
+      sharedDomain,
+      label: effect.label,
       unit: effect.unit,
       onToggle: () => this.lens.toggleTarget(country),
       onSetCenter: (year) => this.lens.setCenter(this.clampCenter(year, yearRange)),

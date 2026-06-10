@@ -11,6 +11,7 @@ export class LensState {
   private effectKey: LensEffectKey;
   private width: number;
   private center: number;
+  private comparison = false;
   private readonly targets = new Set<string>();
   private readonly listeners = new Set<Listener>();
 
@@ -40,6 +41,11 @@ export class LensState {
     return this.targets.has(country);
   }
 
+  /** Whether lens axes share one scale so countries are absolutely comparable. */
+  comparisonEnabled(): boolean {
+    return this.comparison;
+  }
+
   targetCount(): number {
     return this.targets.size;
   }
@@ -60,6 +66,11 @@ export class LensState {
     const rounded = Math.round(year);
     if (rounded === this.center) return;
     this.center = rounded;
+    this.notify();
+  }
+
+  toggleComparison(): void {
+    this.comparison = !this.comparison;
     this.notify();
   }
 
@@ -85,6 +96,7 @@ export class LensState {
   /** Tear the lens down and clear the on-visualization selection. */
   reset(): void {
     this.phase = 'idle';
+    this.comparison = false;
     this.targets.clear();
     this.notify();
   }

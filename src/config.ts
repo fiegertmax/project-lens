@@ -28,8 +28,8 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
 
 export const DEFAULT_METRIC: MetricDefinition = METRICS.co2;
 
-/** Auxiliary columns retained for lens effects (e.g. per-capita). */
-export const EXTRA_COLUMNS: readonly string[] = ['population'];
+/** Auxiliary columns retained for lens effects (e.g. per-capita, read directly). */
+export const EXTRA_COLUMNS: readonly string[] = ['co2_per_capita'];
 
 /** Lens window width bounds and default, in years. */
 export const LENS_WIDTH = { min: 3, max: 40, default: 10 };

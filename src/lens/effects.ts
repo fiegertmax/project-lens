@@ -39,7 +39,7 @@ const growthRate: LensEffect = {
   },
 };
 
-/** Emissions per capita (tonnes/person); co2 is million tonnes, population persons. */
+/** Emissions per capita (tonnes/person), read straight from the dataset column. */
 const perCapita: LensEffect = {
   key: 'per-capita',
   label: 'Per capita',
@@ -49,9 +49,9 @@ const perCapita: LensEffect = {
     const out: DerivedPoint[] = [];
     for (const point of series) {
       if (point.year < from || point.year > to) continue;
-      const population = point.extra.population;
-      if (!Number.isFinite(point.value) || !(population > 0)) continue;
-      out.push({ year: point.year, value: (point.value * 1e6) / population });
+      const value = point.extra.co2_per_capita;
+      if (!Number.isFinite(value)) continue;
+      out.push({ year: point.year, value });
     }
     return out;
   },

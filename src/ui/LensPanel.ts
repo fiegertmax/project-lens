@@ -17,6 +17,7 @@ export class LensPanel {
   private readonly startBtn: HTMLButtonElement;
   private readonly activateBtn: HTMLButtonElement;
   private readonly removeBtn: HTMLButtonElement;
+  private readonly compareBtn: HTMLButtonElement;
   private readonly status: HTMLParagraphElement;
 
   constructor(parent: HTMLElement, state: LensState) {
@@ -26,10 +27,22 @@ export class LensPanel {
     this.buildEffectSelector(panel.body);
     [this.widthSlider, this.widthLabel] = this.buildWidthControl(panel.body);
     [this.startBtn, this.activateBtn, this.removeBtn] = this.buildActions(panel.body);
+    this.compareBtn = this.buildCompareToggle(panel.body);
     this.status = this.buildStatus(panel.body);
 
     state.subscribe(() => this.sync());
     this.sync();
+  }
+
+  /** Toggle sharing one lens scale across countries for absolute comparison. */
+  private buildCompareToggle(parent: HTMLElement): HTMLButtonElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'lens-panel__compare';
+    const button = this.button(wrap, 'Enable comparison', () =>
+      this.state.toggleComparison(),
+    );
+    parent.appendChild(wrap);
+    return button;
   }
 
   private buildEffectSelector(parent: HTMLElement): void {
@@ -122,10 +135,20 @@ export class LensPanel {
     this.show(this.activateBtn, phase === 'selecting');
     this.show(this.removeBtn, phase !== 'idle');
     this.activateBtn.disabled = this.state.targetCount() === 0;
+    this.syncCompare(phase);
 
     const count = this.state.targetCount();
     const suffix = phase === 'selecting' ? ` — ${count} selected` : '';
     this.status.textContent = STATUS[phase] + suffix;
+  }
+
+  /** Comparison needs an active lens on at least two countries. */
+  private syncCompare(phase: string): void {
+    const enabled = this.state.comparisonEnabled();
+    this.compareBtn.disabled = phase !== 'active' || this.state.targetCount() < 2;
+    this.compareBtn.classList.toggle('lens-panel__button--active', enabled);
+    this.compareBtn.setAttribute('aria-pressed', String(enabled));
+    this.compareBtn.textContent = enabled ? 'Disable comparison' : 'Enable comparison';
   }
 
   private show(element: HTMLElement, visible: boolean): void {

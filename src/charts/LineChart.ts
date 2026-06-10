@@ -1,6 +1,7 @@
 import {
   axisBottom,
   axisLeft,
+  axisRight,
   drag,
   extent,
   format,
@@ -13,7 +14,8 @@ import type { DataPoint, MetricDefinition } from '../data/types';
 import type { DerivedPoint } from '../lens/effects';
 import type { YearRange } from '../state/AppState';
 
-const MARGIN = { top: 12, right: 24, bottom: 28, left: 72 };
+// right margin reserves room for the lens's secondary y-axis (no reflow on toggle)
+const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 200;
 const YEAR_FORMAT = format('d');
 
@@ -27,6 +29,9 @@ export interface LensRenderContext {
   isTarget: boolean;
   window: YearRange;
   derived: DerivedPoint[];
+  /** Shared value domain across lensed countries; set only in comparison mode. */
+  sharedDomain?: [number, number];
+  label: string;
   unit: string;
   onToggle(): void;
   onSetCenter(year: number): void;
@@ -91,7 +96,9 @@ export class LineChart {
   /** Draw (or clear) the lens overlay for this chart. Call after update. */
   applyLens(ctx: LensRenderContext | null): void {
     if (!this.geometry) return;
-    this.onLensResize = ctx?.phase === 'active' && ctx.isTarget ? ctx.onResizeBy : null;
+    const lensed = ctx?.phase === 'active' && ctx.isTarget;
+    this.onLensResize = lensed ? ctx!.onResizeBy : null;
+    this.root.classed('line-chart--lensed', lensed); // dims base line behind the lens
     this.renderSelectOverlay(ctx);
     this.renderActiveLens(ctx);
   }
@@ -221,14 +228,14 @@ export class LineChart {
       .on('click', (_event, d) => d.onToggle());
   }
 
-  /** The draggable, resizable lens band + its derived line, on targets only. */
+  /** The draggable, resizable lens band, its derived line + right-hand axis. */
   private renderActiveLens(ctx: LensRenderContext | null): void {
     const { x, innerH } = this.geometry!;
     const show = ctx?.phase === 'active' && ctx.isTarget;
     const layer = this.group('lens-active');
     const data = show && ctx ? [ctx] : [];
 
-    const band = layer
+    layer
       .selectAll<SVGRectElement, LensRenderContext>('rect.lens-band')
       .data(data)
       .join('rect')
@@ -236,40 +243,57 @@ export class LineChart {
       .attr('x', (d) => x(d.window[0]))
       .attr('y', 0)
       .attr('width', (d) => x(d.window[1]) - x(d.window[0]))
-      .attr('height', innerH);
-    band.call(this.dragBand());
+      .attr('height', innerH)
+      .call(this.dragBand());
 
-    this.renderLensLine(layer, data);
-    this.renderLensLabel(layer, data);
+    // one scale drives both the derived line and the secondary axis that reads it
+    const scale = show && ctx ? this.lensScale(ctx, innerH) : null;
+    this.renderLensLine(layer, scale ? data : [], scale);
+    this.renderLensAxis(scale ? ctx : null, scale);
   }
 
-  private renderLensLine(layer: PlotLayer, data: LensRenderContext[]): void {
-    const { x, innerH } = this.geometry!;
+  /** Right-hand y-axis labelling the lens's derived series (weather-diagram style). */
+  private renderLensAxis(ctx: LensRenderContext | null, scale: LinearScale | null): void {
+    const { innerW, innerH } = this.geometry!;
+    const axis = this.group('lens-axis').attr('transform', `translate(${innerW},0)`);
+    if (!ctx || !scale) {
+      axis.selectAll('*').remove();
+      return;
+    }
+    axis.call(axisRight(scale).ticks(5));
+    axis
+      .selectAll<SVGTextElement, string>('text.lens-axis__title')
+      .data([`${ctx.label} (${ctx.unit})`])
+      .join('text')
+      .attr('class', 'lens-axis__title')
+      .attr('transform', `translate(${MARGIN.right - 16},${innerH / 2}) rotate(90)`)
+      .attr('text-anchor', 'middle')
+      .text((d) => d);
+  }
+
+  private renderLensLine(
+    layer: PlotLayer,
+    data: LensRenderContext[],
+    scale: LinearScale | null,
+  ): void {
+    const { x } = this.geometry!;
     layer
       .selectAll<SVGPathElement, LensRenderContext>('path.lens-line')
       .data(data.filter((d) => d.derived.length > 0))
       .join('path')
       .attr('class', 'lens-line')
-      .attr('d', (d) => {
-        const ly = scaleLinear()
-          .domain(this.derivedDomain(d.derived))
-          .range([innerH, 0]);
-        return line<DerivedPoint>()
+      .attr('d', (d) =>
+        line<DerivedPoint>()
           .x((p) => x(p.year))
-          .y((p) => ly(p.value))(d.derived);
-      });
+          .y((p) => scale!(p.value))(d.derived),
+      );
   }
 
-  private renderLensLabel(layer: PlotLayer, data: LensRenderContext[]): void {
-    const { x } = this.geometry!;
-    layer
-      .selectAll<SVGTextElement, LensRenderContext>('text.lens-label')
-      .data(data)
-      .join('text')
-      .attr('class', 'lens-label')
-      .attr('x', (d) => x(d.window[0]) + 4)
-      .attr('y', 12)
-      .text((d) => d.unit);
+  /** Value scale for the derived series, or null when there's nothing to draw. */
+  private lensScale(ctx: LensRenderContext, innerH: number): LinearScale | null {
+    if (ctx.derived.length === 0) return null;
+    const domain = ctx.sharedDomain ?? this.derivedDomain(ctx.derived);
+    return scaleLinear().domain(domain).nice().range([innerH, 0]);
   }
 
   private dragBand() {
