@@ -1,7 +1,7 @@
 import type { RawPoint } from '../data/types';
 import type { YearRange } from '../state/AppState';
 
-export type LensEffectKey = 'growth-rate' | 'per-capita';
+export type LensEffectKey = 'growth-abs' | 'growth-prct' | 'per-capita';
 
 /** One year of a derived effect series drawn inside the lens. */
 export interface DerivedPoint {
@@ -19,24 +19,35 @@ export interface LensEffect {
   compute(series: RawPoint[], window: YearRange): DerivedPoint[];
 }
 
-/** Year-over-year growth rate of emissions (the local derivative), in %. */
-const growthRate: LensEffect = {
-  key: 'growth-rate',
-  label: 'Growth rate',
-  unit: '%/yr',
-  format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} %/yr`,
-  compute(series, [from, to]) {
+/** Reads one auxiliary column straight from the dataset over the lens window. */
+const fromColumn = (column: string) =>
+  function (series: RawPoint[], [from, to]: YearRange): DerivedPoint[] {
     const out: DerivedPoint[] = [];
-    let prev: number | undefined;
     for (const point of series) {
-      if (!Number.isFinite(point.value)) continue;
-      if (prev !== undefined && prev !== 0 && point.year >= from && point.year <= to) {
-        out.push({ year: point.year, value: ((point.value - prev) / prev) * 100 });
-      }
-      prev = point.value;
+      if (point.year < from || point.year > to) continue;
+      const value = point.extra[column];
+      if (!Number.isFinite(value)) continue;
+      out.push({ year: point.year, value });
     }
     return out;
-  },
+  };
+
+/** Absolute year-over-year change in emissions, read from the dataset. */
+const growthAbs: LensEffect = {
+  key: 'growth-abs',
+  label: 'Absolute growth',
+  unit: 'Mt/yr',
+  format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} Mt`,
+  compute: fromColumn('co2_growth_abs'),
+};
+
+/** Relative year-over-year change in emissions (%), read from the dataset. */
+const growthPrct: LensEffect = {
+  key: 'growth-prct',
+  label: 'Relative growth',
+  unit: '%',
+  format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} %`,
+  compute: fromColumn('co2_growth_prct'),
 };
 
 /** Emissions per capita (tonnes/person), read straight from the dataset column. */
@@ -45,20 +56,12 @@ const perCapita: LensEffect = {
   label: 'Per capita',
   unit: 't/person',
   format: (v) => `${v.toFixed(2)} t`,
-  compute(series, [from, to]) {
-    const out: DerivedPoint[] = [];
-    for (const point of series) {
-      if (point.year < from || point.year > to) continue;
-      const value = point.extra.co2_per_capita;
-      if (!Number.isFinite(value)) continue;
-      out.push({ year: point.year, value });
-    }
-    return out;
-  },
+  compute: fromColumn('co2_per_capita'),
 };
 
 /** Registry of available effects; add entries to extend the lens. */
 export const LENS_EFFECTS: Record<LensEffectKey, LensEffect> = {
-  'growth-rate': growthRate,
+  'growth-abs': growthAbs,
+  'growth-prct': growthPrct,
   'per-capita': perCapita,
 };

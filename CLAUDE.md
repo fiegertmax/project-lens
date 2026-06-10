@@ -11,10 +11,6 @@ ProjectLens ("Magic Lenses") is a D3.js visualization built with TypeScript and 
 - Users select countries via checkboxes, find them via a search bar, and configure the displayed time span
 - "ChronoLens": a magic lens hovered over the line chart(s) that reveals configurable derived insights (e.g. rate of change, emissions relative to population) without altering the underlying base visualization
 
-## Project status
-
-The repository currently contains only planning docs (README.md, project-description.md). No Vite/TypeScript scaffold, package.json, or source code exists yet — set this up following the conventions below before/while starting implementation.
-
 ## Tech stack & conventions
 
 - **D3.js** for visualization, **TypeScript** for all source code, **Vite** as build tool/dev server
