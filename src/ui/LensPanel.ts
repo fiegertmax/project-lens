@@ -2,6 +2,9 @@ import { LENS_WIDTH } from '../config';
 import { LENS_EFFECTS } from '../lens/effects';
 import type { LensCombineMode, LensState } from '../state/LensState';
 import { Collapsible } from './Collapsible';
+import { LENS_ICON } from './icons';
+import { InfoTip } from './InfoTip';
+import { LensDragController } from './LensDragController';
 import { ToggleSwitch } from './ToggleSwitch';
 
 /** Combine modes shown as switches, with their noun for the left-panel labels. */
@@ -12,16 +15,25 @@ const COMBINE_TOGGLES: { mode: Exclude<LensCombineMode, 'off'>; noun: string }[]
 ];
 
 const STATUS: Record<string, string> = {
-  idle: 'Configure the lens, then apply it.',
-  active: 'Click + beside a country to lens it. Drag the band; Ctrl/⌘ + scroll to resize.',
+  idle: 'Configure the lens, then drag it onto a chart — or click it to arm it.',
+  active:
+    'Drag the lens onto charts (hold Shift for several), or click + beside a country. Drag the band; Ctrl/⌘ + scroll to resize.',
 };
+
+/** Shown in the info-icon tooltip beside the lens. */
+const LENS_HELP =
+  'Arm the lens, then pick countries to inspect:\n' +
+  '• Click + next to a country, or\n' +
+  '• Drag the lens onto a chart and release.\n' +
+  'Hold Shift while dragging to lens several charts at once.\n' +
+  'Drag the band to move it; Ctrl/⌘ + scroll to resize it.';
 
 /** Second config panel: configure, start, and tear down the ChronoLens. */
 export class LensPanel {
   private readonly state: LensState;
   private readonly widthSlider: HTMLInputElement;
   private readonly widthLabel: HTMLSpanElement;
-  private readonly applyBtn: HTMLButtonElement;
+  private readonly applyWrap: HTMLDivElement;
   private readonly removeBtn: HTMLButtonElement;
   private readonly combineSwitches: ToggleSwitch[];
   private readonly status: HTMLParagraphElement;
@@ -32,7 +44,7 @@ export class LensPanel {
 
     this.buildEffectSelector(panel.body);
     [this.widthSlider, this.widthLabel] = this.buildWidthControl(panel.body);
-    [this.applyBtn, this.removeBtn] = this.buildActions(panel.body);
+    [this.applyWrap, this.removeBtn] = this.buildActions(panel.body);
     this.combineSwitches = this.buildCombineToggles(panel.body);
     this.status = this.buildStatus(panel.body);
 
@@ -96,13 +108,30 @@ export class LensPanel {
     return [slider, label];
   }
 
-  private buildActions(parent: HTMLElement): [HTMLButtonElement, HTMLButtonElement] {
+  /** Lens icon (click to arm, drag onto charts to lens) with a corner info tip,
+   *  paired with the Remove button. */
+  private buildActions(parent: HTMLElement): [HTMLDivElement, HTMLButtonElement] {
     const wrap = document.createElement('div');
     wrap.className = 'lens-panel__actions';
-    const apply = this.button(wrap, 'Apply Lens', () => this.state.apply());
+
+    const applyWrap = document.createElement('div');
+    applyWrap.className = 'lens-panel__apply';
+
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'lens-panel__lens-icon';
+    apply.title = 'Apply lens — click, or drag onto a chart';
+    apply.innerHTML = LENS_ICON;
+    apply.addEventListener('click', () => this.state.apply());
+
+    applyWrap.appendChild(apply);
+    new InfoTip(applyWrap, LENS_HELP);
+    new LensDragController(apply, this.state);
+    wrap.appendChild(applyWrap);
+
     const remove = this.button(wrap, 'Remove Lens', () => this.state.reset());
     parent.appendChild(wrap);
-    return [apply, remove];
+    return [applyWrap, remove];
   }
 
   private button(
@@ -133,7 +162,8 @@ export class LensPanel {
     this.widthSlider.value = String(width);
     this.widthLabel.textContent = `Width: ${width} yrs`;
 
-    this.show(this.applyBtn, phase === 'idle');
+    // The lens icon stays available in both phases — it is also the drag source.
+    this.applyWrap.classList.toggle('lens-panel__apply--active', phase === 'active');
     this.show(this.removeBtn, phase === 'active');
     this.syncCombine(phase);
 

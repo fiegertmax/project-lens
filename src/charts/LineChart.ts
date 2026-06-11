@@ -81,9 +81,10 @@ export class LineChart {
   private onToggle: (() => void) | null = null;
   /** Active resize handler while the lens is on this chart; null otherwise. */
   private onLensResize: ((deltaYears: number) => void) | null = null;
-  /** In-lens combine config: anchor, expander, and the three switches. */
+  /** In-lens combine config: anchor, expander, count hint, and the three switches. */
   private readonly config: HTMLDivElement;
   private readonly configToggle: HTMLButtonElement;
+  private readonly configHint: HTMLParagraphElement;
   private readonly combineSwitches: ToggleSwitch[];
   /** Local-only: which charts have their config panel open (not shared). */
   private configExpanded = false;
@@ -93,13 +94,16 @@ export class LineChart {
   constructor(parent: HTMLElement, country: string, metric: MetricDefinition) {
     this.country = country;
     this.metric = metric;
-    this.root = select(parent).append('div').attr('class', 'line-chart');
+    this.root = select(parent)
+      .append('div')
+      .attr('class', 'line-chart')
+      .attr('data-country', country); // resolves drop targets for the lens drag
     this.lensToggle = this.buildHeader();
     this.svg = this.root.append('svg').attr('class', 'line-chart__svg');
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
-    [this.config, this.configToggle, this.combineSwitches] = this.buildConfig();
+    [this.config, this.configToggle, this.configHint, this.combineSwitches] = this.buildConfig();
     this.svg.node()!.addEventListener('wheel', (e) => this.onWheel(e), {
       passive: false,
     });
@@ -150,6 +154,9 @@ export class LineChart {
     this.config.style.left = `${svgBox.left - rootBox.left + MARGIN.left + x(ctx.window[0])}px`;
     this.config.style.top = `${svgBox.top - rootBox.top + MARGIN.top}px`;
 
+    // Hint disappears as soon as a second country enables the switches.
+    this.configHint.classList.toggle('lens-config__hint--hidden', !ctx.combine.disabled);
+
     for (const [i, { mode, label }] of COMBINE_OPTIONS.entries())
       this.combineSwitches[i].set({
         checked: ctx.combine.mode === mode,
@@ -188,8 +195,9 @@ export class LineChart {
     return toggle.node()!;
   }
 
-  /** Build the (initially hidden) in-lens combine panel: anchor, +/− expander, switches. */
-  private buildConfig(): [HTMLDivElement, HTMLButtonElement, ToggleSwitch[]] {
+  /** Build the (initially hidden) in-lens combine panel: anchor, +/− expander,
+   *  a hint shown while too few countries are lensed, and the switches. */
+  private buildConfig(): [HTMLDivElement, HTMLButtonElement, HTMLParagraphElement, ToggleSwitch[]] {
     const anchor = document.createElement('div');
     anchor.className = 'lens-config lens-config--hidden lens-config--collapsed';
 
@@ -204,6 +212,12 @@ export class LineChart {
 
     const panel = document.createElement('div');
     panel.className = 'lens-config__panel';
+
+    const hint = document.createElement('p');
+    hint.className = 'lens-config__hint';
+    hint.textContent = 'Lens a second country to combine them.';
+    panel.appendChild(hint);
+
     const switches = COMBINE_OPTIONS.map(({ mode }) => {
       const sw = new ToggleSwitch(panel, true);
       sw.onChange(() => this.combine?.onToggle(mode));
@@ -212,7 +226,7 @@ export class LineChart {
 
     anchor.append(toggle, panel);
     this.root.node()!.appendChild(anchor);
-    return [anchor, toggle, switches];
+    return [anchor, toggle, hint, switches];
   }
 
   /** Root element, used by the stack to enforce display order. */

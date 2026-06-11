@@ -275,6 +275,20 @@ body {
   display: none;
 }
 
+/* Hint above the combine toggles while they need a second lensed country */
+.lens-config__hint {
+  margin: 0 0 2px;
+  max-width: 150px;
+  color: var(--lens);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.lens-config__hint--hidden {
+  display: none;
+}
+
 .line-chart__title {
   display: flex;
   align-items: center;
@@ -424,8 +438,128 @@ body {
 
 .lens-panel__actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 8px;
+}
+
+/* Big lens icon doubling as the drag handle, with a corner info tip */
+.lens-panel__apply {
+  position: relative;
+  flex: none;
+}
+
+.lens-panel__lens-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--lens-border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--lens);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.lens-panel__lens-icon:hover {
+  background: var(--lens-fill);
+}
+
+.lens-panel__lens-icon:active {
+  cursor: grabbing;
+}
+
+.lens-panel__lens-icon .icon {
+  width: 30px;
+  height: 30px;
+}
+
+/* Armed state: subtle ring so it reads as "active" while still draggable */
+.lens-panel__apply--active .lens-panel__lens-icon {
+  background: var(--lens-fill);
+  box-shadow: 0 0 0 3px var(--lens-fill);
+}
+
+/* Info tip: corner icon + fixed hover bubble (never clipped by the sidebar) */
+.info-tip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.info-tip:hover {
+  color: var(--lens);
+}
+
+.info-tip .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.lens-panel__apply .info-tip {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+}
+
+.info-tip__bubble {
+  position: fixed;
+  z-index: 20;
+  max-width: 240px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-line;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.12s ease;
+}
+
+.info-tip__bubble--hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+/* Lens drag: ghost trailing the cursor + the current drop-target highlight */
+.lens-ghost {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px; /* centre on the cursor */
+  color: var(--lens);
+  pointer-events: none; /* keep elementFromPoint reaching the chart below */
+}
+
+.lens-ghost .icon {
+  width: 30px;
+  height: 30px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+body.lens-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.line-chart--drop {
+  outline: 2px dashed var(--lens-border);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 
 .lens-panel__button {
