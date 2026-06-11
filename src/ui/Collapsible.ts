@@ -3,7 +3,7 @@ export class Collapsible {
   readonly root: HTMLDivElement;
   readonly body: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
-  private collapsed = false;
+  private collapsed = true;
 
   constructor(parent: HTMLElement, title: string, className = '') {
     this.root = document.createElement('div');
@@ -28,7 +28,7 @@ export class Collapsible {
 
     this.root.append(header, this.body);
     parent.appendChild(this.root);
-    this.syncToggle();
+    this.setCollapsed(this.collapsed);
   }
 
   private setCollapsed(collapsed: boolean): void {

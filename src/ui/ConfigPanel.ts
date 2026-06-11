@@ -12,7 +12,7 @@ export class ConfigPanel {
     state: AppState,
     yearBounds: YearRange,
   ) {
-    const panel = new Collapsible(parent, 'Configuration', 'config-panel');
+    const panel = new Collapsible(parent, 'Base Visualization', 'config-panel');
 
     const timeSpan = new Collapsible(panel.body, 'Time span', 'config-section');
     new YearRangeSlider(timeSpan.body, state, yearBounds);

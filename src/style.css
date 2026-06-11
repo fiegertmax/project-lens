@@ -107,9 +107,24 @@ body {
 
 /* Year range slider: two overlaid range inputs sharing one track. */
 .year-slider__readout {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
+}
+
+.year-slider__field {
+  width: 70px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
   font-variant-numeric: tabular-nums;
+}
+
+.year-slider__separator {
   color: var(--text-muted);
 }
 
