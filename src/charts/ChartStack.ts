@@ -1,11 +1,12 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
+import { combineSeries } from '../lens/combine';
 import { LENS_EFFECTS } from '../lens/effects';
 import type { DerivedPoint } from '../lens/effects';
 import type { AppState, YearRange } from '../state/AppState';
 import type { LensState } from '../state/LensState';
 import { resolveSeries } from '../utils/interpolation';
-import type { LensControl, LensRenderContext } from './LineChart';
+import type { LensCombineControl, LensControl, LensRenderContext } from './LineChart';
 import { LineChart } from './LineChart';
 
 /** Vertical, scrollable stack of one LineChart per selected country. */
@@ -55,15 +56,16 @@ export class ChartStack {
 
     const yearRange = this.state.yearRange();
     const window = this.lensWindow(yearRange);
-    const derived = this.deriveTargets(countries, window);
-    const sharedDomain = this.comparisonDomain(derived);
+    const derived = this.combineTargets(this.deriveTargets(countries, window));
+    const sharedDomain = this.alignedDomain(derived);
+    const combine = this.combineControl();
 
     for (const country of countries) {
       const chart = this.ensureChart(country);
       const series = this.dataset.series(country);
       chart.update(series ? resolveSeries(series, yearRange) : [], yearRange);
       this.container.appendChild(chart.node()); // re-append enforces order
-      const ctx = this.lensContext(country, yearRange, window, derived, sharedDomain);
+      const ctx = this.lensContext(country, yearRange, window, derived, sharedDomain, combine);
       chart.applyLens(ctx);
       chart.setLensControl(this.lensControl(country));
     }
@@ -94,11 +96,23 @@ export class ChartStack {
     return derived;
   }
 
-  /** Shared [min, max] across all lensed countries, or undefined when off/single. */
-  private comparisonDomain(
+  /** When aggregating, replace every target's series with one shared combined series. */
+  private combineTargets(
+    derived: Map<string, DerivedPoint[]>,
+  ): Map<string, DerivedPoint[]> {
+    const mode = this.lens.combineMode();
+    if (mode !== 'accumulate' && mode !== 'mean') return derived;
+    const combined = combineSeries([...derived.values()], mode);
+    const out = new Map<string, DerivedPoint[]>();
+    for (const country of derived.keys()) out.set(country, combined);
+    return out;
+  }
+
+  /** Shared [min, max] aligning the lens axes, or undefined when 'off'/single. */
+  private alignedDomain(
     derived: Map<string, DerivedPoint[]>,
   ): [number, number] | undefined {
-    if (!this.lens.comparisonEnabled() || derived.size < 2) return undefined;
+    if (this.lens.combineMode() === 'off' || derived.size < 2) return undefined;
     let min = 0;
     let max = 0;
     let found = false;
@@ -112,6 +126,16 @@ export class ChartStack {
     return found ? [min, max] : undefined;
   }
 
+  /** Shared compare/accumulate/mean state handed to every lensed chart's panel. */
+  private combineControl(): LensCombineControl {
+    return {
+      mode: this.lens.combineMode(),
+      accumulable: LENS_EFFECTS[this.lens.currentEffect()].accumulable,
+      disabled: this.lens.targetCount() < 2,
+      onToggle: (mode) => this.lens.toggleMode(mode),
+    };
+  }
+
   /** A render context only for countries the active lens currently targets. */
   private lensContext(
     country: string,
@@ -119,17 +143,21 @@ export class ChartStack {
     window: YearRange,
     derived: Map<string, DerivedPoint[]>,
     sharedDomain: [number, number] | undefined,
+    combine: LensCombineControl,
   ): LensRenderContext | null {
     if (this.lens.currentPhase() !== 'active' || !this.lens.isTarget(country))
       return null;
 
     const effect = LENS_EFFECTS[this.lens.currentEffect()];
+    const suffix =
+      combine.mode === 'accumulate' ? ' (sum)' : combine.mode === 'mean' ? ' (mean)' : '';
     return {
       window,
       derived: derived.get(country) ?? [],
       sharedDomain,
-      label: effect.label,
+      label: effect.label + suffix,
       unit: effect.unit,
+      combine,
       onSetCenter: (year) => this.lens.setCenter(this.clampCenter(year, yearRange)),
       onResizeBy: (delta) => this.lens.setWidth(this.lens.currentWidth() + delta),
     };

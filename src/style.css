@@ -218,7 +218,61 @@ body {
 }
 
 .line-chart {
+  position: relative; /* anchors the in-lens combine overlay */
   margin-bottom: 8px;
+}
+
+/* In-lens combine config: zero-size anchor at the band's top-left corner */
+.lens-config {
+  position: absolute;
+  width: 0;
+  height: 0;
+  z-index: 2;
+}
+
+.lens-config--hidden {
+  display: none;
+}
+
+/* +/− expander, sitting just outside the band's top-left, in the lens colour */
+.lens-config__toggle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--lens-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--lens);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lens-config__toggle:hover {
+  border-color: var(--lens);
+}
+
+/* Opens to the left of the band so it never covers the lens effect */
+.lens-config__panel {
+  position: absolute;
+  top: 0;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+
+.lens-config--collapsed .lens-config__panel {
+  display: none;
 }
 
 .line-chart__title {
@@ -398,28 +452,35 @@ body {
   display: none;
 }
 
-/* Comparison toggle: pill switch, purple (--accent, matches base line) when on */
-.lens-panel__compare {
+/* Stacked combine switches in the left panel */
+.lens-panel__combine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Reusable pill switch (compare / accumulate / mean), purple (--accent) when on */
+.toggle-switch {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
   cursor: pointer;
 }
 
-.lens-panel__compare--disabled {
+.toggle-switch--disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.lens-panel__compare-input {
+.toggle-switch__input {
   position: absolute;
   width: 0;
   height: 0;
   opacity: 0;
 }
 
-.lens-panel__switch {
+.toggle-switch__track {
   position: relative;
   flex: none;
   width: 36px;
@@ -429,7 +490,7 @@ body {
   transition: background 0.15s ease;
 }
 
-.lens-panel__switch::before {
+.toggle-switch__track::before {
   content: '';
   position: absolute;
   top: 2px;
@@ -441,21 +502,41 @@ body {
   transition: transform 0.15s ease;
 }
 
-.lens-panel__compare-input:checked + .lens-panel__switch {
+.toggle-switch__input:checked + .toggle-switch__track {
   background: var(--accent);
 }
 
-.lens-panel__compare-input:checked + .lens-panel__switch::before {
+.toggle-switch__input:checked + .toggle-switch__track::before {
   transform: translateX(16px);
 }
 
-.lens-panel__compare-input:focus-visible + .lens-panel__switch {
+.toggle-switch__input:focus-visible + .toggle-switch__track {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.lens-panel__compare-label {
+.toggle-switch__label {
   color: var(--text-muted);
+}
+
+/* Compact variant for the in-lens overlay: smaller track, tighter rows */
+.toggle-switch--compact {
+  gap: 7px;
+  font-size: 12px;
+}
+
+.toggle-switch--compact .toggle-switch__track {
+  width: 28px;
+  height: 16px;
+}
+
+.toggle-switch--compact .toggle-switch__track::before {
+  width: 12px;
+  height: 12px;
+}
+
+.toggle-switch--compact .toggle-switch__input:checked + .toggle-switch__track::before {
+  transform: translateX(12px);
 }
 
 .lens-panel__status {

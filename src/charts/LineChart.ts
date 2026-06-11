@@ -13,6 +13,8 @@ import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { DerivedPoint } from '../lens/effects';
 import type { YearRange } from '../state/AppState';
+import type { LensCombineMode } from '../state/LensState';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 
 // right margin reserves room for the lens's secondary y-axis (no reflow on toggle)
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
@@ -28,10 +30,11 @@ type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 export interface LensRenderContext {
   window: YearRange;
   derived: DerivedPoint[];
-  /** Shared value domain across lensed countries; set only in comparison mode. */
+  /** Shared value domain across lensed countries; set unless mode is 'off'/single. */
   sharedDomain?: [number, number];
   label: string;
   unit: string;
+  combine: LensCombineControl;
   onSetCenter(year: number): void;
   onResizeBy(deltaYears: number): void;
 }
@@ -41,6 +44,23 @@ export interface LensControl {
   isTarget: boolean;
   onToggle(): void;
 }
+
+/** Shared compare/accumulate/mean state driving the in-lens config panel. */
+export interface LensCombineControl {
+  mode: LensCombineMode;
+  /** Whether the current effect may be summed (false for percentages). */
+  accumulable: boolean;
+  /** Inert until at least two countries are lensed. */
+  disabled: boolean;
+  onToggle(mode: Exclude<LensCombineMode, 'off'>): void;
+}
+
+/** The three exclusive combine modes, paired with their compact panel labels. */
+const COMBINE_OPTIONS: { mode: Exclude<LensCombineMode, 'off'>; label: string }[] = [
+  { mode: 'compare', label: 'compare' },
+  { mode: 'accumulate', label: 'accumulate' },
+  { mode: 'mean', label: 'mean' },
+];
 
 interface ChartGeometry {
   x: LinearScale;
@@ -61,6 +81,14 @@ export class LineChart {
   private onToggle: (() => void) | null = null;
   /** Active resize handler while the lens is on this chart; null otherwise. */
   private onLensResize: ((deltaYears: number) => void) | null = null;
+  /** In-lens combine config: anchor, expander, and the three switches. */
+  private readonly config: HTMLDivElement;
+  private readonly configToggle: HTMLButtonElement;
+  private readonly combineSwitches: ToggleSwitch[];
+  /** Local-only: which charts have their config panel open (not shared). */
+  private configExpanded = false;
+  /** Latest combine control; the switches read it on user interaction. */
+  private combine: LensCombineControl | null = null;
 
   constructor(parent: HTMLElement, country: string, metric: MetricDefinition) {
     this.country = country;
@@ -71,6 +99,7 @@ export class LineChart {
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+    [this.config, this.configToggle, this.combineSwitches] = this.buildConfig();
     this.svg.node()!.addEventListener('wheel', (e) => this.onWheel(e), {
       passive: false,
     });
@@ -103,6 +132,36 @@ export class LineChart {
     this.onLensResize = ctx ? ctx.onResizeBy : null;
     this.root.classed('line-chart--lensed', ctx !== null); // dims base line behind the lens
     this.renderActiveLens(ctx);
+    this.renderConfig(ctx);
+  }
+
+  /** Position and sync the in-lens combine panel (hidden when not a target). */
+  private renderConfig(ctx: LensRenderContext | null): void {
+    this.config.classList.toggle('lens-config--hidden', ctx === null);
+    if (!ctx) {
+      this.combine = null;
+      return;
+    }
+    this.combine = ctx.combine;
+
+    const { x } = this.geometry!;
+    const rootBox = this.root.node()!.getBoundingClientRect();
+    const svgBox = this.svg.node()!.getBoundingClientRect();
+    this.config.style.left = `${svgBox.left - rootBox.left + MARGIN.left + x(ctx.window[0])}px`;
+    this.config.style.top = `${svgBox.top - rootBox.top + MARGIN.top}px`;
+
+    for (const [i, { mode, label }] of COMBINE_OPTIONS.entries())
+      this.combineSwitches[i].set({
+        checked: ctx.combine.mode === mode,
+        disabled: ctx.combine.disabled || (mode === 'accumulate' && !ctx.combine.accumulable),
+        label,
+      });
+    this.syncConfigCollapsed();
+  }
+
+  private syncConfigCollapsed(): void {
+    this.config.classList.toggle('lens-config--collapsed', !this.configExpanded);
+    this.configToggle.textContent = this.configExpanded ? '−' : '+';
   }
 
   /** Show/update the header lens toggle; null hides it (lens not applied). */
@@ -127,6 +186,33 @@ export class LineChart {
       .on('click', () => this.onToggle?.());
     title.append('span').attr('class', 'line-chart__title-name').text(this.country);
     return toggle.node()!;
+  }
+
+  /** Build the (initially hidden) in-lens combine panel: anchor, +/− expander, switches. */
+  private buildConfig(): [HTMLDivElement, HTMLButtonElement, ToggleSwitch[]] {
+    const anchor = document.createElement('div');
+    anchor.className = 'lens-config lens-config--hidden lens-config--collapsed';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'lens-config__toggle';
+    toggle.title = 'Combine options';
+    toggle.addEventListener('click', () => {
+      this.configExpanded = !this.configExpanded;
+      this.syncConfigCollapsed();
+    });
+
+    const panel = document.createElement('div');
+    panel.className = 'lens-config__panel';
+    const switches = COMBINE_OPTIONS.map(({ mode }) => {
+      const sw = new ToggleSwitch(panel, true);
+      sw.onChange(() => this.combine?.onToggle(mode));
+      return sw;
+    });
+
+    anchor.append(toggle, panel);
+    this.root.node()!.appendChild(anchor);
+    return [anchor, toggle, switches];
   }
 
   /** Root element, used by the stack to enforce display order. */

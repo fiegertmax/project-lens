@@ -1,7 +1,11 @@
 import { LENS_WIDTH } from '../config';
+import { LENS_EFFECTS } from '../lens/effects';
 import type { LensEffectKey } from '../lens/effects';
 
 export type LensPhase = 'idle' | 'active';
+
+/** How lensed countries' derived series are combined / scaled. Mutually exclusive. */
+export type LensCombineMode = 'off' | 'compare' | 'accumulate' | 'mean';
 
 type Listener = () => void;
 
@@ -11,8 +15,8 @@ export class LensState {
   private effectKey: LensEffectKey;
   private width: number;
   private center: number;
-  /** On by default: selecting multiple lens targets should be comparable immediately. */
-  private comparison = true;
+  /** Compare by default: multiple lens targets should be comparable immediately. */
+  private mode: LensCombineMode = 'compare';
   private readonly targets = new Set<string>();
   private readonly listeners = new Set<Listener>();
 
@@ -42,9 +46,9 @@ export class LensState {
     return this.targets.has(country);
   }
 
-  /** Whether lens axes share one scale so countries are absolutely comparable. */
-  comparisonEnabled(): boolean {
-    return this.comparison;
+  /** The active combine/scale mode for lensed countries. */
+  combineMode(): LensCombineMode {
+    return this.mode;
   }
 
   targetCount(): number {
@@ -53,6 +57,9 @@ export class LensState {
 
   setEffect(effectKey: LensEffectKey): void {
     this.effectKey = effectKey;
+    // Summing percentages is meaningless — fall back to compare for such effects.
+    if (this.mode === 'accumulate' && !LENS_EFFECTS[effectKey].accumulable)
+      this.mode = 'compare';
     this.notify();
   }
 
@@ -70,8 +77,9 @@ export class LensState {
     this.notify();
   }
 
-  toggleComparison(): void {
-    this.comparison = !this.comparison;
+  /** Switch to a mode, or back to 'off' when toggling the active one — exclusive. */
+  toggleMode(mode: Exclude<LensCombineMode, 'off'>): void {
+    this.mode = this.mode === mode ? 'off' : mode;
     this.notify();
   }
 
@@ -91,7 +99,7 @@ export class LensState {
   /** Tear the lens down and clear the on-visualization selection. */
   reset(): void {
     this.phase = 'idle';
-    this.comparison = true;
+    this.mode = 'compare';
     this.targets.clear();
     this.notify();
   }

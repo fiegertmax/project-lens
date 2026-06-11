@@ -14,6 +14,8 @@ export interface LensEffect {
   key: LensEffectKey;
   label: string;
   unit: string;
+  /** Whether summing this metric across countries is meaningful (false for %). */
+  accumulable: boolean;
   format(value: number): string;
   /** Derived series for the years inside window, computed from raw points. */
   compute(series: RawPoint[], window: YearRange): DerivedPoint[];
@@ -37,6 +39,7 @@ const growthAbs: LensEffect = {
   key: 'growth-abs',
   label: 'Absolute growth',
   unit: 'Mt/yr',
+  accumulable: true,
   format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} Mt`,
   compute: fromColumn('co2_growth_abs'),
 };
@@ -46,6 +49,7 @@ const growthPrct: LensEffect = {
   key: 'growth-prct',
   label: 'Relative growth',
   unit: '%',
+  accumulable: false,
   format: (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)} %`,
   compute: fromColumn('co2_growth_prct'),
 };
@@ -55,6 +59,7 @@ const perCapita: LensEffect = {
   key: 'per-capita',
   label: 'Per capita',
   unit: 't/person',
+  accumulable: true,
   format: (v) => `${v.toFixed(2)} t`,
   compute: fromColumn('co2_per_capita'),
 };

@@ -1,7 +1,15 @@
 import { LENS_WIDTH } from '../config';
 import { LENS_EFFECTS } from '../lens/effects';
-import type { LensState } from '../state/LensState';
+import type { LensCombineMode, LensState } from '../state/LensState';
 import { Collapsible } from './Collapsible';
+import { ToggleSwitch } from './ToggleSwitch';
+
+/** Combine modes shown as switches, with their noun for the left-panel labels. */
+const COMBINE_TOGGLES: { mode: Exclude<LensCombineMode, 'off'>; noun: string }[] = [
+  { mode: 'compare', noun: 'Comparison' },
+  { mode: 'accumulate', noun: 'Accumulation' },
+  { mode: 'mean', noun: 'Mean' },
+];
 
 const STATUS: Record<string, string> = {
   idle: 'Configure the lens, then apply it.',
@@ -15,9 +23,7 @@ export class LensPanel {
   private readonly widthLabel: HTMLSpanElement;
   private readonly applyBtn: HTMLButtonElement;
   private readonly removeBtn: HTMLButtonElement;
-  private readonly compareWrap: HTMLLabelElement;
-  private readonly compareInput: HTMLInputElement;
-  private readonly compareLabel: HTMLSpanElement;
+  private readonly combineSwitches: ToggleSwitch[];
   private readonly status: HTMLParagraphElement;
 
   constructor(parent: HTMLElement, state: LensState) {
@@ -27,36 +33,23 @@ export class LensPanel {
     this.buildEffectSelector(panel.body);
     [this.widthSlider, this.widthLabel] = this.buildWidthControl(panel.body);
     [this.applyBtn, this.removeBtn] = this.buildActions(panel.body);
-    [this.compareWrap, this.compareInput, this.compareLabel] =
-      this.buildCompareToggle(panel.body);
+    this.combineSwitches = this.buildCombineToggles(panel.body);
     this.status = this.buildStatus(panel.body);
 
     state.subscribe(() => this.sync());
     this.sync();
   }
 
-  /** On/off switch sharing one lens scale across countries for absolute comparison. */
-  private buildCompareToggle(
-    parent: HTMLElement,
-  ): [HTMLLabelElement, HTMLInputElement, HTMLSpanElement] {
-    const wrap = document.createElement('label');
-    wrap.className = 'lens-panel__compare';
-
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.className = 'lens-panel__compare-input';
-    input.checked = this.state.comparisonEnabled();
-    input.addEventListener('change', () => this.state.toggleComparison());
-
-    const track = document.createElement('span');
-    track.className = 'lens-panel__switch';
-
-    const label = document.createElement('span');
-    label.className = 'lens-panel__compare-label';
-
-    wrap.append(input, track, label);
-    parent.appendChild(wrap);
-    return [wrap, input, label];
+  /** Exclusive compare / accumulate / mean switches sharing the lens scale. */
+  private buildCombineToggles(parent: HTMLElement): ToggleSwitch[] {
+    const group = document.createElement('div');
+    group.className = 'lens-panel__combine';
+    parent.appendChild(group);
+    return COMBINE_TOGGLES.map(({ mode }) => {
+      const sw = new ToggleSwitch(group);
+      sw.onChange(() => this.state.toggleMode(mode));
+      return sw;
+    });
   }
 
   private buildEffectSelector(parent: HTMLElement): void {
@@ -142,21 +135,27 @@ export class LensPanel {
 
     this.show(this.applyBtn, phase === 'idle');
     this.show(this.removeBtn, phase === 'active');
-    this.syncCompare(phase);
+    this.syncCombine(phase);
 
     const count = this.state.targetCount();
     const suffix = phase === 'active' && count > 0 ? ` — ${count} lensed` : '';
     this.status.textContent = STATUS[phase] + suffix;
   }
 
-  /** Comparison needs an active lens on at least two countries. */
-  private syncCompare(phase: string): void {
-    const enabled = this.state.comparisonEnabled();
-    const disabled = phase !== 'active' || this.state.targetCount() < 2;
-    this.compareInput.disabled = disabled;
-    this.compareInput.checked = enabled;
-    this.compareWrap.classList.toggle('lens-panel__compare--disabled', disabled);
-    this.compareLabel.textContent = `Comparison ${enabled ? 'enabled' : 'disabled'}`;
+  /** Combine modes need an active lens on at least two countries; sum needs a non-% effect. */
+  private syncCombine(phase: string): void {
+    const mode = this.state.combineMode();
+    const inactive = phase !== 'active' || this.state.targetCount() < 2;
+    const accumulable = LENS_EFFECTS[this.state.currentEffect()].accumulable;
+    COMBINE_TOGGLES.forEach(({ mode: m, noun }, i) => {
+      const checked = mode === m;
+      const disabled = inactive || (m === 'accumulate' && !accumulable);
+      this.combineSwitches[i].set({
+        checked,
+        disabled,
+        label: `${noun} ${checked ? 'enabled' : 'disabled'}`,
+      });
+    });
   }
 
   private show(element: HTMLElement, visible: boolean): void {
