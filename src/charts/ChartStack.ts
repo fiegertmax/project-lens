@@ -36,6 +36,11 @@ export class ChartStack {
     parent.appendChild(this.container);
   }
 
+  /** Root element, used by the app to toggle visibility between base visualizations. */
+  node(): HTMLDivElement {
+    return this.container;
+  }
+
   /** Reconcile charts with the current selection, year range, and lens. */
   update(): void {
     if (this.rendering) return;

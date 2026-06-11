@@ -30,6 +30,8 @@ const LENS_HELP =
 
 /** Second config panel: configure, start, and tear down the ChronoLens. */
 export class LensPanel {
+  /** Root element, used by the app to hide the panel for visualizations without a lens. */
+  readonly root: HTMLDivElement;
   private readonly state: LensState;
   private readonly widthSlider: HTMLInputElement;
   private readonly widthLabel: HTMLSpanElement;
@@ -41,6 +43,7 @@ export class LensPanel {
   constructor(parent: HTMLElement, state: LensState) {
     this.state = state;
     const panel = new Collapsible(parent, 'Lens', 'lens-panel');
+    this.root = panel.root;
 
     this.buildEffectSelector(panel.body);
     [this.widthSlider, this.widthLabel] = this.buildWidthControl(panel.body);

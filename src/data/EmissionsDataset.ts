@@ -43,6 +43,12 @@ export class EmissionsDataset {
     return this.extent;
   }
 
+  /** This entity's value in a given year, or undefined if absent/missing. */
+  valueInYear(entity: string, year: number): number | undefined {
+    const point = this.series(entity)?.points.find((p) => p.year === year);
+    return point && Number.isFinite(point.value) ? point.value : undefined;
+  }
+
   private static index(
     rows: DSVRowString[],
     metric: MetricDefinition,

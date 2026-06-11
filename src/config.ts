@@ -16,6 +16,12 @@ export const DEFAULT_COUNTRIES: readonly string[] = [
 /** Requested 1950–2025; the dataset ends at 2024, so the max is clamped on load. */
 export const DEFAULT_YEAR_RANGE: readonly [number, number] = [1950, 2025];
 
+/** Default single-year selection for the "Global emissions" Sankey view. */
+export const DEFAULT_GLOBAL_YEAR = 2020;
+
+/** Number of top-emitting countries shown individually per continent in the Sankey. */
+export const SANKEY_TOP_COUNTRIES = 5;
+
 /** Metric extension point: add entries here to expose new measures (OCP). */
 export const METRICS: Record<MetricKey, MetricDefinition> = {
   co2: {

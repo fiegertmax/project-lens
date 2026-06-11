@@ -29,7 +29,7 @@ body {
 /* Layout: fixed-height shell so the chart column scrolls independently. */
 .app {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 340px 1fr;
   height: 100vh;
 }
 
@@ -103,6 +103,42 @@ body {
 
 .config-section:last-child {
   margin-bottom: 0;
+}
+
+/* Base-visualization tabs */
+.tabs__header {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.tabs__button {
+  flex: 1;
+  padding: 8px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.tabs__button:hover {
+  color: var(--text);
+}
+
+.tabs__button--active,
+.tabs__button--active:hover {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tabs__panel--hidden {
+  display: none;
 }
 
 /* Year range slider: two overlaid range inputs sharing one track. */
@@ -230,6 +266,43 @@ body {
 .chart-stack__hint {
   color: var(--text-muted);
   padding: 24px;
+}
+
+/* Sankey chart (Global emissions) */
+.sankey-chart {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.sankey-chart__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.sankey-chart__empty {
+  color: var(--text-muted);
+  padding: 24px;
+}
+
+.sankey-chart__empty--hidden {
+  display: none;
+}
+
+.sankey-chart__svg text {
+  fill: var(--text);
+  font-size: 11px;
+}
+
+.sankey-link {
+  fill-opacity: 0.35;
+  stroke: none;
+}
+
+.sankey-node rect {
+  stroke: var(--bg);
+  stroke-width: 1;
 }
 
 .line-chart {

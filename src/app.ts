@@ -1,7 +1,9 @@
 import { ChartStack } from './charts/ChartStack';
+import { SankeyChart } from './charts/SankeyChart';
 import {
   DATA_URL,
   DEFAULT_COUNTRIES,
+  DEFAULT_GLOBAL_YEAR,
   DEFAULT_LENS_EFFECT,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
@@ -29,7 +31,7 @@ export class App {
 
     const bounds = this.clampBounds(dataset.yearExtent());
     const range = this.clampRange(bounds);
-    const state = new AppState(DEFAULT_COUNTRIES, range);
+    const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
     const lens = new LensState(
       DEFAULT_LENS_EFFECT,
       LENS_WIDTH.default,
@@ -55,13 +57,25 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds);
-    new LensPanel(sidebar, lens);
+    const lensPanel = new LensPanel(sidebar, lens);
     const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
+    const sankey = new SankeyChart(main, dataset);
 
-    state.subscribe(() => charts.update());
-    lens.subscribe(() => charts.update());
-    window.addEventListener('resize', () => charts.update());
-    charts.update();
+    const syncView = (): void => {
+      const isByCountry = state.activeTab() === 'by-country';
+      charts.node().style.display = isByCountry ? '' : 'none';
+      sankey.node().style.display = isByCountry ? 'none' : '';
+      lensPanel.root.style.display = isByCountry ? '' : 'none';
+      if (isByCountry) charts.update();
+      else sankey.update(state.globalYear());
+    };
+
+    state.subscribe(syncView);
+    lens.subscribe(() => {
+      if (state.activeTab() === 'by-country') charts.update();
+    });
+    window.addEventListener('resize', syncView);
+    syncView();
   }
 
   /** Restrict the slider to years that actually carry data. */
@@ -73,5 +87,10 @@ export class App {
   private clampRange(bounds: YearRange): YearRange {
     const [from, to] = DEFAULT_YEAR_RANGE;
     return [Math.max(from, bounds[0]), Math.min(to, bounds[1])];
+  }
+
+  /** Clamp the default global year inside the available bounds. */
+  private clampYear(year: number, [min, max]: YearRange): number {
+    return Math.min(Math.max(year, min), max);
   }
 }
