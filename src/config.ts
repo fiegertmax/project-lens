@@ -20,7 +20,7 @@ export const DEFAULT_YEAR_RANGE: readonly [number, number] = [1950, 2025];
 export const DEFAULT_GLOBAL_YEAR = 2020;
 
 /** Number of top-emitting countries shown individually per continent in the Sankey. */
-export const SANKEY_TOP_COUNTRIES = 5;
+export const SANKEY_TOP_COUNTRIES = 3;
 
 /** Metric extension point: add entries here to expose new measures (OCP). */
 export const METRICS: Record<MetricKey, MetricDefinition> = {

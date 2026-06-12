@@ -296,8 +296,7 @@ body {
 }
 
 .sankey-link {
-  fill-opacity: 0.35;
-  stroke: none;
+  stroke-opacity: 0.35;
 }
 
 .sankey-node rect {

@@ -13,12 +13,19 @@ const WORLD_COLOR = '#6b6375';
 const BUNKER_COLOR = '#b9b9c2';
 
 const NODE_WIDTH = 16;
-const NODE_PADDING = 6;
+const NODE_PADDING = 3;
 const LABEL_GAP = 6;
 const MARGIN = { top: 24, right: 220, bottom: 10, left: 170 };
 const MIN_WIDTH = 640;
-const ROW_HEIGHT = 22;
 const MIN_HEIGHT = 480;
+/**
+ * Target px-per-Mt for the country column (d3-sankey's global ky), so node sizes stay
+ * stable across years. Height is derived so the country column hits exactly this scale
+ * (see render()).
+ */
+const VALUE_SCALE = 0.055;
+/** Minimum vertical distance between kept label centers in a column, to avoid overlap (~1.2x the 11px font-size). */
+const LABEL_LINE_HEIGHT = 13;
 
 const VALUE_FORMAT = format(',.0f');
 
@@ -41,6 +48,10 @@ interface GraphBuilder {
   nodes: NodeDatum[];
   links: RawLink[];
   indexOf: Map<string, number>;
+  /** Total node count in the country column (top-N + "Other" per populated continent), for sizing the layout. */
+  countryNodeCount: number;
+  /** Sum of values in the country column == sum of populated continents' totals, for sizing the layout. */
+  countryValueSum: number;
 }
 
 /** Sankey diagram of global CO2 emissions: World -> continents/transport -> top countries. */
@@ -91,7 +102,13 @@ export class SankeyChart {
 
   /** World -> populated continents/transport -> top countries (+ "Other <continent>"). */
   private buildGraph(year: number): GraphBuilder {
-    const builder: GraphBuilder = { nodes: [], links: [], indexOf: new Map() };
+    const builder: GraphBuilder = {
+      nodes: [],
+      links: [],
+      indexOf: new Map(),
+      countryNodeCount: 0,
+      countryValueSum: 0,
+    };
     const worldValue = this.dataset.valueInYear('World', year);
     if (worldValue === undefined || worldValue <= EPSILON) return builder;
 
@@ -106,7 +123,10 @@ export class SankeyChart {
       const index = this.addNode(builder, name, color);
       builder.links.push({ source: worldIndex, target: index, value });
 
-      if (!isBunker) this.addCountries(builder, name, year, index, color, value);
+      if (!isBunker) {
+        builder.countryValueSum += value;
+        this.addCountries(builder, name, year, index, color, value);
+      }
     }
 
     return builder;
@@ -131,12 +151,14 @@ export class SankeyChart {
     for (const { country, value } of top) {
       const index = this.addNode(builder, country, color);
       builder.links.push({ source: parentIndex, target: index, value });
+      builder.countryNodeCount += 1;
     }
 
     const other = continentValue - top.reduce((sum, c) => sum + c.value, 0);
     if (other > EPSILON) {
       const index = this.addNode(builder, `Other ${continent}`, color);
       builder.links.push({ source: parentIndex, target: index, value: other });
+      builder.countryNodeCount += 1;
     }
   }
 
@@ -157,7 +179,13 @@ export class SankeyChart {
     }
 
     const width = Math.max(this.container.clientWidth, MIN_WIDTH);
-    const height = Math.max(MIN_HEIGHT, nodes.length * ROW_HEIGHT);
+    // Size the country column to exactly VALUE_SCALE px/Mt (the layout's binding ky),
+    // so node sizes stay stable across years. Assumes d3-sankey's nodePadding isn't
+    // capped, i.e. VALUE_SCALE * countryValueSum >= MARGIN.top + MARGIN.bottom.
+    const height = Math.max(
+      MIN_HEIGHT,
+      VALUE_SCALE * builder.countryValueSum + (builder.countryNodeCount - 1) * NODE_PADDING,
+    );
     this.svg.attr('width', width).attr('height', height);
 
     const layout = sankey<NodeDatum, object>()
@@ -174,9 +202,24 @@ export class SankeyChart {
       links: links.map((l) => ({ ...l })),
     });
 
+    const visibleLabels = this.computeVisibleLabels(graph.nodes as Node[]);
     this.renderLinks(graph.links as Link[]);
-    this.renderNodes(graph.nodes as Node[]);
+    this.renderNodes(graph.nodes as Node[], visibleLabels);
   }
+
+/*
+private renderLinks(links: Link[]): void {
+  const sel = this.svg
+    .selectAll<SVGPathElement, Link>('path.sankey-link')
+    .data(links)
+    .join('path')
+    .attr('class', 'sankey-link')
+    .attr('d', sankeyLinkHorizontal())
+    .attr('stroke-width', (d) => Math.max(1, d.width ?? 1))
+    .attr('fill', 'none')                                      // ← add this
+    .attr('stroke', (d) => (d.source as Node).color)          // ← was .attr('fill', ...)
+    .attr('stroke-opacity', 0.4);                             // optional, conventional
+*/
 
   private renderLinks(links: Link[]): void {
     const sel = this.svg
@@ -186,7 +229,8 @@ export class SankeyChart {
       .attr('class', 'sankey-link')
       .attr('d', sankeyLinkHorizontal())
       .attr('stroke-width', (d) => Math.max(1, d.width ?? 1))
-      .attr('fill', (d) => (d.source as Node).color);
+      .attr('fill', 'none')                            
+      .attr('stroke', (d) => (d.source as Node).color);
 
     sel
       .selectAll('title')
@@ -195,7 +239,7 @@ export class SankeyChart {
       .text((d) => `${(d.source as Node).name} → ${(d.target as Node).name}: ${this.formatValue(d.value)}`);
   }
 
-  private renderNodes(nodes: Node[]): void {
+  private renderNodes(nodes: Node[], visibleLabels: Set<Node>): void {
     const groups = this.svg
       .selectAll<SVGGElement, Node>('g.sankey-node')
       .data(nodes)
@@ -220,7 +264,7 @@ export class SankeyChart {
 
     groups
       .selectAll<SVGTextElement, Node>('text')
-      .data((d) => [d])
+      .data((d) => (visibleLabels.has(d) ? [d] : []))
       .join('text')
       .attr('class', 'sankey-label')
       .attr('x', (d) => this.labelX(d))
@@ -228,6 +272,36 @@ export class SankeyChart {
       .attr('text-anchor', (d) => this.labelAnchor(d))
       .attr('dy', (d) => (d.depth === 0 ? '0' : '0.35em'))
       .text((d) => `${d.name} (${this.formatValue(d.value ?? 0)})`);
+  }
+
+  /**
+   * Per depth-column, keep the first node's label and any subsequent label whose center
+   * is at least LABEL_LINE_HEIGHT px below the last kept label's center (avoids overlap
+   * while showing as many labels as fit, unlike a per-node minimum-height check).
+   */
+  private computeVisibleLabels(nodes: Node[]): Set<Node> {
+    const visible = new Set<Node>();
+    const columns = new Map<number, Node[]>();
+    for (const node of nodes) {
+      const depth = node.depth ?? 0;
+      const column = columns.get(depth);
+      if (column) column.push(node);
+      else columns.set(depth, [node]);
+    }
+
+    for (const column of columns.values()) {
+      column.sort((a, b) => a.y0! - b.y0!);
+      let lastCenter = -Infinity;
+      for (const node of column) {
+        const center = (node.y0! + node.y1!) / 2;
+        if (center - lastCenter >= LABEL_LINE_HEIGHT) {
+          visible.add(node);
+          lastCenter = center;
+        }
+      }
+    }
+
+    return visible;
   }
 
   /** World above its node; continents to the left; countries/"Other" to the right. */
