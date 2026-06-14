@@ -48,6 +48,23 @@ export function countriesOfContinent(
     .sort((a, b) => b.value - a.value);
 }
 
+/** <root> -> one leaf per source entry, each with its own color.
+ *  Used by the source-breakdown lens in focused-continent mode. */
+export function buildSourceGraph(
+  rootName: string,
+  rootColor: string,
+  sources: { label: string; value: number; color: string }[],
+): GraphBuilder {
+  const builder = createGraphBuilder();
+  if (sources.length === 0) return builder;
+  const rootIndex = addNode(builder, rootName, rootColor);
+  for (const { label, value, color } of sources) {
+    const idx = addNode(builder, label, color);
+    builder.links.push({ source: rootIndex, target: idx, value });
+  }
+  return builder;
+}
+
 /** <root> -> one leaf per entry in `countries` (no "Other", no top-N limiting).
  *  Used for both the focused-continent zoom and the "Other <continent>" lens. */
 export function buildRootGraph(

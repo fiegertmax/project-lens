@@ -39,7 +39,60 @@ export const EXTRA_COLUMNS: readonly string[] = [
   'co2_per_capita',
   'co2_growth_abs',
   'co2_growth_prct',
+  'coal_co2',
+  'oil_co2',
+  'gas_co2',
+  'cement_co2',
+  'flaring_co2',
+  'other_industry_co2',
+  'land_use_change_co2',
 ];
+
+/** CO₂ source breakdown used by the focused-continent source lens. */
+export const CO2_SOURCES = [
+  {
+    key: 'coal_co2',
+    label: 'Coal',
+    description: 'CO₂ from burning coal for electricity generation, heating, and industrial processes.',
+    color: '#6b4c3b',
+  },
+  {
+    key: 'oil_co2',
+    label: 'Oil',
+    description: 'CO₂ from burning oil products — primarily transport, but also heating and industry.',
+    color: '#c8813e',
+  },
+  {
+    key: 'gas_co2',
+    label: 'Gas',
+    description: 'CO₂ from burning natural gas in power plants, buildings, and industry.',
+    color: '#f5c261',
+  },
+  {
+    key: 'cement_co2',
+    label: 'Cement',
+    description: 'CO₂ released during cement production when limestone is heated (calcination).',
+    color: '#9e9e9e',
+  },
+  {
+    key: 'flaring_co2',
+    label: 'Flaring',
+    description: 'CO₂ from burning off excess natural gas at oil and gas extraction sites.',
+    color: '#e05c5c',
+  },
+  {
+    key: 'other_industry_co2',
+    label: 'Other industry',
+    description: 'CO₂ from other industrial processes not captured by the sources above.',
+    color: '#7f9ecc',
+  },
+  {
+    key: 'land_use_change_co2',
+    label: 'Land use change',
+    description: 'CO₂ from deforestation and land conversion. Positive when forests are cleared; negative when forests grow back.',
+    color: '#4caf7d',
+  },
+] as const;
 
 /** Lens window width bounds and default, in years. */
 export const LENS_WIDTH = { min: 3, max: 40, default: 10 };

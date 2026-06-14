@@ -70,7 +70,10 @@ export class App {
       lensPanel.root.style.display = isByCountry ? '' : 'none';
       sankeyLensPanel.root.style.display = isByCountry ? 'none' : '';
       if (isByCountry) charts.update();
-      else sankey.update(state.globalYear(), state.focusedContinent());
+      else {
+        sankey.update(state.globalYear(), state.focusedContinent());
+        sankeyLensPanel.update(state.focusedContinent() !== null);
+      }
     };
 
     state.subscribe(syncView);

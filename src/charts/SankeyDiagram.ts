@@ -11,8 +11,9 @@ export type SankeyExtent = [[number, number], [number, number]];
 const NODE_WIDTH = 16;
 const NODE_PADDING = 3;
 const LABEL_GAP = 6;
-/** Minimum vertical distance between kept label centers in a column, to avoid overlap (~1.2x the 11px font-size). */
-const LABEL_LINE_HEIGHT = 13;
+/** Minimum vertical distance between kept label centers in a column, to avoid overlap (~1.2x the 11px font-size).
+ *  Also exported so callers can pass it as `minNodeHeight` to `draw()` to guarantee all nodes are labeled. */
+export const LABEL_LINE_HEIGHT = 13;
 /** "Other <continent>" nodes get at least this many px of visual height/stroke so they are findable. */
 const MIN_OTHER_VISUAL_HEIGHT = 6;
 const OTHER_PREFIX = 'Other ';
@@ -69,12 +70,46 @@ export class SankeyDiagram {
   }
 
   /** Lays out and draws `builder` into the target group. Returns the laid-out
-   *  nodes (with x0/x1/y0/y1/depth) for hit-testing by callers. */
-  draw(builder: GraphBuilder, extent: SankeyExtent): Node[] {
-    const { nodes, links } = builder;
+   *  nodes (with x0/x1/y0/y1/depth) for hit-testing by callers.
+   *
+   *  When `minNodeHeight > 0` (e.g. pass `LABEL_LINE_HEIGHT`), any link whose
+   *  natural pixel height would fall below that threshold has its value inflated
+   *  so the rendered node is at least that tall and can carry a label. */
+  draw(builder: GraphBuilder, extent: SankeyExtent, minNodeHeight = 0): Node[] {
+    const { nodes } = builder;
     if (nodes.length === 0) {
       this.target.selectAll('*').remove();
       return [];
+    }
+
+    // Capture original (pre-inflation) values per node name so labels and tooltips
+    // always reflect real data even after links are inflated for visual minimum height.
+    // For leaves: incoming link value; for root: sum of all outgoing link values.
+    const originalValues = new Map<string, number>();
+    const inflatedNodeNames = new Set<string>();
+
+    let effectiveLinks = builder.links;
+    if (minNodeHeight > 0) {
+      for (const link of builder.links) {
+        const tgt = builder.nodes[link.target]?.name;
+        if (tgt) originalValues.set(tgt, link.value);
+        const src = builder.nodes[link.source]?.name;
+        if (src) originalValues.set(src, (originalValues.get(src) ?? 0) + link.value);
+      }
+
+      const previewNodes = this.layoutOnly(builder, extent);
+      const ky = SankeyDiagram.estimateKy(previewNodes);
+      if (ky > 0) {
+        const minValue = minNodeHeight / ky;
+        effectiveLinks = builder.links.map((l) => {
+          if (l.value < minValue) {
+            const tgt = builder.nodes[l.target]?.name;
+            if (tgt) inflatedNodeNames.add(tgt);
+            return { ...l, value: minValue };
+          }
+          return l;
+        });
+      }
     }
 
     const layout = sankey<NodeDatum, object>()
@@ -86,15 +121,16 @@ export class SankeyDiagram {
 
     const graph = layout({
       nodes: nodes.map((n) => ({ ...n })),
-      links: links.map((l) => ({ ...l })),
+      links: effectiveLinks.map((l) => ({ ...l })),
     });
 
     const graphNodes = graph.nodes as Node[];
     const maxDepth = Math.max(...graphNodes.map((n) => n.depth ?? 0));
 
     const visibleLabels = computeVisibleLabels(graphNodes);
-    this.renderLinks(graph.links as Link[]);
-    this.renderNodes(graphNodes, visibleLabels, maxDepth);
+    this.renderLinks(graph.links as Link[], originalValues);
+    this.renderNodes(graphNodes, visibleLabels, maxDepth, inflatedNodeNames, originalValues);
+    this.renderFootnote(extent, inflatedNodeNames.size > 0);
 
     return graphNodes;
   }
@@ -116,7 +152,7 @@ export class SankeyDiagram {
     return graph.nodes as Node[];
   }
 
-  private renderLinks(links: Link[]): void {
+  private renderLinks(links: Link[], originalValues: Map<string, number>): void {
     const sel = this.target
       .selectAll<SVGPathElement, Link>('path.sankey-link')
       .data(links)
@@ -134,10 +170,20 @@ export class SankeyDiagram {
       .selectAll('title')
       .data((d) => [d])
       .join('title')
-      .text((d) => `${(d.source as Node).name} → ${(d.target as Node).name}: ${formatValue(d.value)}`);
+      .text((d) => {
+        const tgt = (d.target as Node).name;
+        const val = originalValues.get(tgt) ?? d.value;
+        return `${(d.source as Node).name} → ${tgt}: ${formatValue(val)}`;
+      });
   }
 
-  private renderNodes(nodes: Node[], visibleLabels: Set<Node>, maxDepth: number): void {
+  private renderNodes(
+    nodes: Node[],
+    visibleLabels: Set<Node>,
+    maxDepth: number,
+    inflatedNodeNames: Set<string>,
+    originalValues: Map<string, number>,
+  ): void {
     const groups = this.target
       .selectAll<SVGGElement, Node>('g.sankey-node')
       .data(nodes)
@@ -158,7 +204,10 @@ export class SankeyDiagram {
       .selectAll('title')
       .data((d) => [d])
       .join('title')
-      .text((d) => `${d.name}: ${formatValue(d.value ?? 0)}`);
+      .text((d) => {
+        const val = originalValues.get(d.name) ?? d.value ?? 0;
+        return `${d.name}: ${formatValue(val)}`;
+      });
 
     groups
       .selectAll<SVGTextElement, Node>('text')
@@ -169,7 +218,22 @@ export class SankeyDiagram {
       .attr('y', (d) => this.labelY(d))
       .attr('text-anchor', (d) => this.labelAnchor(d, maxDepth))
       .attr('dy', (d) => (d.depth === 0 ? '0' : '0.35em'))
-      .text((d) => `${d.name} (${formatValue(d.value ?? 0)})`);
+      .text((d) => {
+        const val = originalValues.get(d.name) ?? d.value ?? 0;
+        const marker = inflatedNodeNames.has(d.name) ? '*' : '';
+        return `${d.name}${marker} (${formatValue(val)})`;
+      });
+  }
+
+  private renderFootnote(extent: SankeyExtent, show: boolean): void {
+    this.target
+      .selectAll<SVGTextElement, true>('text.sankey-footnote')
+      .data(show ? [true as const] : [])
+      .join('text')
+      .attr('class', 'sankey-footnote')
+      .attr('x', extent[0][0])
+      .attr('y', extent[1][1] + 14)
+      .text('* Bar enlarged for visibility — label shows actual value');
   }
 
   /** Root above its own left edge (aligned with the heading); middle columns to the
@@ -188,5 +252,16 @@ export class SankeyDiagram {
   private labelAnchor(d: Node, maxDepth: number): string {
     if (d.depth === 0 || d.depth === maxDepth) return 'start';
     return 'end';
+  }
+
+  /** Extract the global ky (px per value unit) from any node with positive height and value. */
+  private static estimateKy(nodes: Node[]): number {
+    let best: Node | undefined;
+    for (const n of nodes) {
+      if ((n.value ?? 0) > 0 && n.y1! - n.y0! > 0) {
+        if (!best || (n.value ?? 0) > (best.value ?? 0)) best = n;
+      }
+    }
+    return best ? (best.y1! - best.y0!) / best.value! : 0;
   }
 }

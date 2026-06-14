@@ -4,7 +4,8 @@ import { SANKEY_TOP_COUNTRIES } from '../config';
 import { BUNKER_ENTITIES, CONTINENTS, FOCUSABLE_CONTINENTS } from '../data/continents';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { SankeyDetailLens } from './SankeyDetailLens';
-import { computeVisibleLabels, SankeyDiagram } from './SankeyDiagram';
+import { SankeySourceLens } from './SankeySourceLens';
+import { computeVisibleLabels, LABEL_LINE_HEIGHT, SankeyDiagram } from './SankeyDiagram';
 import type { SankeyExtent } from './SankeyDiagram';
 import {
   addNode,
@@ -41,6 +42,7 @@ export class SankeyChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly diagram: SankeyDiagram;
   private readonly lens: SankeyDetailLens;
+  private readonly sourceLens: SankeySourceLens;
   private readonly dataset: EmissionsDataset;
   private readonly continentColor: ScaleOrdinal<string, string>;
 
@@ -65,6 +67,7 @@ export class SankeyChart {
     const diagramGroup = this.svg.append('g').attr('class', 'sankey-diagram');
     this.diagram = new SankeyDiagram(diagramGroup);
     this.lens = new SankeyDetailLens(this.svg, dataset);
+    this.sourceLens = new SankeySourceLens(this.svg, dataset);
   }
 
   /** Rebuild the diagram for the given year, optionally zoomed into one continent. */
@@ -92,21 +95,23 @@ export class SankeyChart {
     // Fixed footprint regardless of year: as totals grow, ky shrinks and bars get
     // thinner, so a continent's share of the World bar stays visually comparable
     // across years instead of the whole chart growing.
+    const focused = focusContinent !== null;
     const width = Math.max(this.container.clientWidth - 2 * CONTAINER_PADDING, MIN_WIDTH);
     const height = Math.max(
       this.container.clientHeight - 2 * CONTAINER_PADDING - TITLE_RESERVED_HEIGHT,
       MIN_HEIGHT,
     );
+    // Extra bottom margin in focused mode so the inflation footnote clears the chart area.
+    const bottomMargin = focused ? MARGIN.bottom + 18 : MARGIN.bottom;
     const extent: SankeyExtent = [
       [MARGIN.left, MARGIN.top],
-      [width - MARGIN.right, height - MARGIN.bottom],
+      [width - MARGIN.right, height - bottomMargin],
     ];
-
     let builder: GraphBuilder;
     let shownCountries: Set<string>;
 
-    if (focusContinent !== null) {
-      builder = this.buildFocusedGraph(focusContinent, year);
+    if (focused) {
+      builder = this.buildFocusedGraph(focusContinent!, year);
       shownCountries = new Set();
     } else {
       ({ builder, shownCountries } = this.buildGlobalGraph(year, extent));
@@ -116,13 +121,15 @@ export class SankeyChart {
 
     if (builder.nodes.length === 0) {
       this.svg.attr('width', 0).attr('height', 0);
-      this.lens.update([], year, shownCountries);
+      this.lens.update([], year, new Set());
+      this.sourceLens.update([], year, false);
       return;
     }
 
     this.svg.attr('width', width).attr('height', height);
-    const graphNodes = this.diagram.draw(builder, extent);
-    this.lens.update(graphNodes, year, shownCountries);
+    const graphNodes = this.diagram.draw(builder, extent, focused ? LABEL_LINE_HEIGHT : 0);
+    this.lens.update(focused ? [] : graphNodes, year, focused ? new Set() : shownCountries);
+    this.sourceLens.update(graphNodes, year, focused);
   }
 
   /**
