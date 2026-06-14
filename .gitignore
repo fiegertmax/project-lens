@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 context
+.claude
 dist-ssr
 *.local
 

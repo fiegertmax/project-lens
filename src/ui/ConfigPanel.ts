@@ -1,6 +1,7 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { AppState, BaseVisualizationTab, YearRange } from '../state/AppState';
 import { Collapsible } from './Collapsible';
+import { ContinentFocusSelector } from './ContinentFocusSelector';
 import { CountrySelector } from './CountrySelector';
 import { Tabs } from './Tabs';
 import { YearRangeSlider } from './YearRangeSlider';
@@ -33,7 +34,10 @@ export class ConfigPanel {
         {
           id: 'global',
           label: 'Global emissions',
-          render: (body) => new YearSelector(body, state, yearBounds),
+          render: (body) => {
+            new YearSelector(body, state, yearBounds);
+            new ContinentFocusSelector(body, state);
+          },
         },
       ],
       state.activeTab(),

@@ -10,6 +10,12 @@ export const CONTINENTS: readonly string[] = [
   'Antarctica',
 ];
 
+/** Continents selectable for the Sankey's "Set focus" zoom (excludes Antarctica,
+ *  which has no country-level breakdown). */
+export const FOCUSABLE_CONTINENTS: readonly string[] = CONTINENTS.filter(
+  (c) => c !== 'Antarctica',
+);
+
 /** Global transport emissions not attributable to any country/continent.
  *  Together with CONTINENTS, these sum exactly to the World total. */
 export const BUNKER_ENTITIES: readonly string[] = [

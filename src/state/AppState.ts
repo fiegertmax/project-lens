@@ -11,6 +11,7 @@ export class AppState {
   private range: YearRange;
   private tab: BaseVisualizationTab = 'by-country';
   private year: number;
+  private focusContinent: string | null = null;
   private readonly listeners = new Set<Listener>();
 
   constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {
@@ -60,6 +61,16 @@ export class AppState {
   setGlobalYear(year: number): void {
     if (year === this.year) return;
     this.year = year;
+    this.notify();
+  }
+
+  focusedContinent(): string | null {
+    return this.focusContinent;
+  }
+
+  setFocusedContinent(continent: string | null): void {
+    if (continent === this.focusContinent) return;
+    this.focusContinent = continent;
     this.notify();
   }
 

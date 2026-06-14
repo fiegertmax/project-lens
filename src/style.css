@@ -225,6 +225,27 @@ body {
   cursor: pointer;
 }
 
+/* Sankey focus selector (continent zoom) */
+.focus-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.focus-selector__select {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.focus-selector__select--hidden {
+  display: none;
+}
+
 /* Country selector */
 .country-selector__search {
   width: 100%;

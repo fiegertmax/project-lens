@@ -36,6 +36,10 @@ export class ToggleSwitch {
     this.handler = handler;
   }
 
+  checked(): boolean {
+    return this.input.checked;
+  }
+
   set({ checked, disabled, label }: ToggleState): void {
     this.input.checked = checked;
     this.input.disabled = disabled;

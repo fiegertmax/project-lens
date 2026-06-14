@@ -3,7 +3,7 @@ import type { ScaleOrdinal, Selection } from 'd3';
 import { sankey, sankeyLeft, sankeyLinkHorizontal } from 'd3-sankey';
 import type { SankeyLink, SankeyNode } from 'd3-sankey';
 import { SANKEY_TOP_COUNTRIES } from '../config';
-import { BUNKER_ENTITIES, CONTINENTS, COUNTRY_TO_CONTINENT } from '../data/continents';
+import { BUNKER_ENTITIES, CONTINENTS, COUNTRY_TO_CONTINENT, FOCUSABLE_CONTINENTS } from '../data/continents';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 
 /** Links/nodes below this value (million tonnes) are dropped as visual noise. */
@@ -61,7 +61,7 @@ export class SankeyChart {
   constructor(parent: HTMLElement, dataset: EmissionsDataset) {
     this.dataset = dataset;
     this.continentColor = scaleOrdinal<string, string>()
-      .domain(CONTINENTS.filter((c) => c !== 'Antarctica'))
+      .domain(FOCUSABLE_CONTINENTS)
       .range(schemeTableau10);
 
     this.container = document.createElement('div');
@@ -78,10 +78,19 @@ export class SankeyChart {
     this.svg = select(this.container).append('svg').attr('class', 'sankey-chart__svg');
   }
 
-  /** Rebuild the diagram for the given year. */
-  update(year: number): void {
-    this.title.textContent = `Global CO₂ emissions, ${year} (million tonnes)`;
-    const builder = this.buildGraph(year);
+  /** Rebuild the diagram for the given year, optionally zoomed into one continent. */
+  update(year: number, focusContinent: string | null): void {
+    const builder = focusContinent !== null
+      ? this.buildFocusedGraph(focusContinent, year)
+      : this.buildGraph(year);
+
+    this.title.textContent = focusContinent !== null
+      ? `${focusContinent} CO₂ emissions, ${year} (million tonnes)`
+      : `Global CO₂ emissions, ${year} (million tonnes)`;
+    this.empty.textContent = focusContinent !== null
+      ? `No emissions data for ${focusContinent} in this year.`
+      : 'No global emissions data for this year.';
+
     this.empty.classList.toggle('sankey-chart__empty--hidden', builder.nodes.length > 0);
     this.render(builder);
   }
@@ -133,11 +142,7 @@ export class SankeyChart {
     color: string,
     continentValue: number,
   ): void {
-    const countries = Object.entries(COUNTRY_TO_CONTINENT)
-      .filter(([, c]) => c === continent)
-      .map(([country]) => ({ country, value: this.dataset.valueInYear(country, year) }))
-      .filter((c): c is { country: string; value: number } => c.value !== undefined && c.value > EPSILON)
-      .sort((a, b) => b.value - a.value);
+    const countries = this.countriesOfContinent(continent, year);
 
     const top = countries.slice(0, SANKEY_TOP_COUNTRIES);
     for (const { country, value } of top) {
@@ -150,6 +155,33 @@ export class SankeyChart {
       const index = this.addNode(builder, `Other ${continent}`, color);
       builder.links.push({ source: parentIndex, target: index, value: other });
     }
+  }
+
+  /** <Continent> -> ALL of its countries (no "Other", no top-N limiting). */
+  private buildFocusedGraph(continent: string, year: number): GraphBuilder {
+    const builder: GraphBuilder = { nodes: [], links: [], indexOf: new Map() };
+
+    const countries = this.countriesOfContinent(continent, year);
+    if (countries.length === 0) return builder;
+
+    const color = this.continentColor(continent);
+    const rootIndex = this.addNode(builder, continent, color);
+
+    for (const { country, value } of countries) {
+      const index = this.addNode(builder, country, color);
+      builder.links.push({ source: rootIndex, target: index, value });
+    }
+
+    return builder;
+  }
+
+  /** All countries of a continent with data this year, sorted by descending emissions. */
+  private countriesOfContinent(continent: string, year: number): { country: string; value: number }[] {
+    return Object.entries(COUNTRY_TO_CONTINENT)
+      .filter(([, c]) => c === continent)
+      .map(([country]) => ({ country, value: this.dataset.valueInYear(country, year) }))
+      .filter((c): c is { country: string; value: number } => c.value !== undefined && c.value > EPSILON)
+      .sort((a, b) => b.value - a.value);
   }
 
   private addNode(builder: GraphBuilder, name: string, color: string): number {
@@ -192,9 +224,12 @@ export class SankeyChart {
       links: links.map((l) => ({ ...l })),
     });
 
-    const visibleLabels = this.computeVisibleLabels(graph.nodes as Node[]);
+    const graphNodes = graph.nodes as Node[];
+    const maxDepth = Math.max(...graphNodes.map((n) => n.depth ?? 0));
+
+    const visibleLabels = this.computeVisibleLabels(graphNodes);
     this.renderLinks(graph.links as Link[]);
-    this.renderNodes(graph.nodes as Node[], visibleLabels);
+    this.renderNodes(graphNodes, visibleLabels, maxDepth);
   }
 
   private renderLinks(links: Link[]): void {
@@ -215,7 +250,7 @@ export class SankeyChart {
       .text((d) => `${(d.source as Node).name} → ${(d.target as Node).name}: ${this.formatValue(d.value)}`);
   }
 
-  private renderNodes(nodes: Node[], visibleLabels: Set<Node>): void {
+  private renderNodes(nodes: Node[], visibleLabels: Set<Node>, maxDepth: number): void {
     const groups = this.svg
       .selectAll<SVGGElement, Node>('g.sankey-node')
       .data(nodes)
@@ -243,9 +278,9 @@ export class SankeyChart {
       .data((d) => (visibleLabels.has(d) ? [d] : []))
       .join('text')
       .attr('class', 'sankey-label')
-      .attr('x', (d) => this.labelX(d))
+      .attr('x', (d) => this.labelX(d, maxDepth))
       .attr('y', (d) => this.labelY(d))
-      .attr('text-anchor', (d) => this.labelAnchor(d))
+      .attr('text-anchor', (d) => this.labelAnchor(d, maxDepth))
       .attr('dy', (d) => (d.depth === 0 ? '0' : '0.35em'))
       .text((d) => `${d.name} (${this.formatValue(d.value ?? 0)})`);
   }
@@ -280,11 +315,12 @@ export class SankeyChart {
     return visible;
   }
 
-  /** World above its own left edge (aligned with the heading); continents to the left of theirs; countries/"Other" to the right. */
-  private labelX(d: Node): number {
-    if (d.depth === 1) return d.x0! - LABEL_GAP;
+  /** Root above its own left edge (aligned with the heading); middle columns to the
+   *  left of theirs; the last (leaf) column to the right. */
+  private labelX(d: Node, maxDepth: number): number {
     if (d.depth === 0) return d.x0!;
-    return d.x1! + LABEL_GAP;
+    if (d.depth === maxDepth) return d.x1! + LABEL_GAP;
+    return d.x0! - LABEL_GAP;
   }
 
   private labelY(d: Node): number {
@@ -292,8 +328,9 @@ export class SankeyChart {
     return (d.y0! + d.y1!) / 2;
   }
 
-  private labelAnchor(d: Node): string {
-    return d.depth === 1 ? 'end' : 'start';
+  private labelAnchor(d: Node, maxDepth: number): string {
+    if (d.depth === 0 || d.depth === maxDepth) return 'start';
+    return 'end';
   }
 
   private formatValue(value: number): string {
