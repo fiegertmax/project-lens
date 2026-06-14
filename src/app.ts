@@ -1,4 +1,6 @@
 import { ChartStack } from './charts/ChartStack';
+import { PieChart } from './charts/PieChart';
+import { PieLensManager } from './charts/PieLensManager';
 import { SankeyChart } from './charts/SankeyChart';
 import {
   DATA_URL,
@@ -14,8 +16,10 @@ import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
 import { LensState } from './state/LensState';
+import { PieLensState } from './state/PieLensState';
 import { ConfigPanel } from './ui/ConfigPanel';
 import { LensPanel } from './ui/LensPanel';
+import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
@@ -38,14 +42,16 @@ export class App {
       LENS_WIDTH.default,
       Math.round((range[0] + range[1]) / 2),
     );
+    const pieLens = new PieLensState();
 
-    this.render(dataset, state, lens, bounds);
+    this.render(dataset, state, lens, pieLens, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
     lens: LensState,
+    pieLens: PieLensState,
     bounds: YearRange,
   ): void {
     this.root.innerHTML = '';
@@ -62,17 +68,37 @@ export class App {
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
     const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
     const sankey = new SankeyChart(main, dataset);
+    const pie = new PieChart(main, dataset);
+    const pieManager = new PieLensManager({
+      overlay: pie.overlay(),
+      chartRoot: pie.node(),
+      state: pieLens,
+      dataset,
+      getYear: () => state.globalYear(),
+    });
+    const pieLensPanel = new PieLensPanel(sidebar, pieLens, pieManager, pie.overlay());
 
     const syncView = (): void => {
       const isByCountry = state.activeTab() === 'by-country';
+      const isGlobalSankey = !isByCountry && state.globalVizMode() === 'sankey';
+      const isGlobalPie = !isByCountry && state.globalVizMode() === 'pie';
+
       charts.node().style.display = isByCountry ? '' : 'none';
-      sankey.node().style.display = isByCountry ? 'none' : '';
+      sankey.node().style.display = isGlobalSankey ? '' : 'none';
+      pie.node().style.display = isGlobalPie ? '' : 'none';
       lensPanel.root.style.display = isByCountry ? '' : 'none';
-      sankeyLensPanel.root.style.display = isByCountry ? 'none' : '';
+      sankeyLensPanel.root.style.display = isGlobalSankey ? '' : 'none';
+      pieLensPanel.root.style.display = isGlobalPie ? '' : 'none';
+
+      if (!isGlobalPie) pieLens.clear();
+
       if (isByCountry) charts.update();
-      else {
+      else if (isGlobalSankey) {
         sankey.update(state.globalYear(), state.focusedContinent());
         sankeyLensPanel.update(state.focusedContinent() !== null);
+      } else {
+        pie.update(state.globalYear(), state.focusedContinent());
+        pieManager.redrawAll();
       }
     };
 

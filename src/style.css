@@ -860,3 +860,187 @@ body.lens-dragging {
   font-size: 10px;
   font-style: italic;
 }
+
+/* Pie chart (Global emissions, "Pie" mode) */
+.pie-chart {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.pie-chart__title {
+  margin: 0 0 8px;
+  padding-left: 3rem;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pie-chart__empty {
+  color: var(--text-muted);
+  padding: 24px;
+}
+
+.pie-chart__empty--hidden {
+  display: none;
+}
+
+.pie-chart__svg {
+  display: block;
+}
+
+.pie-chart__svg text {
+  fill: var(--text);
+  font-size: 11px;
+}
+
+.pie-slice path {
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.pie-slice--drop-target path {
+  stroke: var(--lens);
+  stroke-width: 3;
+}
+
+/* The source slice of an active lens — same teal accent as the line-chart lens
+ *  styling, and itself a drag handle for retargeting that lens. */
+.pie-slice--lensed path {
+  stroke: var(--lens);
+  stroke-width: 3;
+  cursor: grab;
+}
+
+.pie-slice--lensed:active path {
+  cursor: grabbing;
+}
+
+/* When both highlighted as source AND being hovered as a drop target, keep
+ *  the teal stroke but make it bolder. */
+.pie-slice--lensed.pie-slice--drop-target path {
+  stroke-width: 4;
+}
+
+.pie-slice--inflated path {
+  stroke-dasharray: 3 2;
+  stroke: rgba(0, 0, 0, 0.35);
+}
+
+.pie-label {
+  pointer-events: none;
+  font-size: 11px;
+}
+
+/* Inside labels share the same look as outside labels — no bold, no stroke. */
+.pie-label--inside {
+  fill: var(--text);
+}
+
+.pie-leader {
+  pointer-events: none;
+}
+
+.pie-footnote {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+/* Floating drill-down lens overlay (lives inside the pie chart container) */
+.pie-lens-layer {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  pointer-events: none;
+}
+
+.pie-lens {
+  position: absolute;
+  pointer-events: auto;
+  background: var(--bg);
+  border: 1px solid var(--lens-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* While being dragged, ignore pointer hits so elementFromPoint can see the slice below. */
+.pie-lens--dragging {
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.pie-lens__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pie-lens__header:active {
+  cursor: grabbing;
+}
+
+.pie-lens__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.pie-lens__close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+
+.pie-lens__close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text);
+}
+
+.pie-lens__body {
+  position: relative;
+}
+
+.pie-lens__empty {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Show a grabbing cursor everywhere during a lens drag */
+body.pie-lens-dragging {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* Sankey | Pie radio selector inside the Global emissions tab */
+.viz-mode-selector {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0 10px;
+}
+
+.viz-mode-selector__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}

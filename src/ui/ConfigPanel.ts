@@ -4,6 +4,7 @@ import { Collapsible } from './Collapsible';
 import { ContinentFocusSelector } from './ContinentFocusSelector';
 import { CountrySelector } from './CountrySelector';
 import { Tabs } from './Tabs';
+import { VizModeSelector } from './VizModeSelector';
 import { YearRangeSlider } from './YearRangeSlider';
 import { YearSelector } from './YearSelector';
 
@@ -35,6 +36,7 @@ export class ConfigPanel {
           id: 'global',
           label: 'Global emissions',
           render: (body) => {
+            new VizModeSelector(body, state);
             new YearSelector(body, state, yearBounds);
             new ContinentFocusSelector(body, state);
           },

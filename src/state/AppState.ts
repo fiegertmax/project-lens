@@ -3,6 +3,9 @@ export type YearRange = [number, number];
 /** Which base visualization is active in the main area. */
 export type BaseVisualizationTab = 'by-country' | 'global';
 
+/** Which sub-visualization is shown inside the "global" tab. */
+export type GlobalVizMode = 'sankey' | 'pie';
+
 type Listener = () => void;
 
 /** Observable single source of truth for the view configuration. */
@@ -12,6 +15,7 @@ export class AppState {
   private tab: BaseVisualizationTab = 'by-country';
   private year: number;
   private focusContinent: string | null = null;
+  private vizMode: GlobalVizMode = 'sankey';
   private readonly listeners = new Set<Listener>();
 
   constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {
@@ -71,6 +75,16 @@ export class AppState {
   setFocusedContinent(continent: string | null): void {
     if (continent === this.focusContinent) return;
     this.focusContinent = continent;
+    this.notify();
+  }
+
+  globalVizMode(): GlobalVizMode {
+    return this.vizMode;
+  }
+
+  setGlobalVizMode(mode: GlobalVizMode): void {
+    if (mode === this.vizMode) return;
+    this.vizMode = mode;
     this.notify();
   }
 
