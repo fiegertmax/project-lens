@@ -15,15 +15,14 @@ const BUNKER_COLOR = '#b9b9c2';
 const NODE_WIDTH = 16;
 const NODE_PADDING = 3;
 const LABEL_GAP = 6;
-const MARGIN = { top: 24, right: 220, bottom: 10, left: 170 };
+/** left matches .sankey-chart__title's padding-left, so the World label aligns with the heading. */
+const MARGIN = { top: 24, right: 220, bottom: 10, left: 45 };
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 480;
-/**
- * Target px-per-Mt for the country column (d3-sankey's global ky), so node sizes stay
- * stable across years. Height is derived so the country column hits exactly this scale
- * (see render()).
- */
-const VALUE_SCALE = 0.055;
+/** Matches .sankey-chart's CSS padding, so the SVG fills its content box exactly. */
+const CONTAINER_PADDING = 16;
+/** Reserved space above the SVG for .sankey-chart__title (line height + margin-bottom). */
+const TITLE_RESERVED_HEIGHT = 30;
 /** Minimum vertical distance between kept label centers in a column, to avoid overlap (~1.2x the 11px font-size). */
 const LABEL_LINE_HEIGHT = 13;
 
@@ -48,10 +47,6 @@ interface GraphBuilder {
   nodes: NodeDatum[];
   links: RawLink[];
   indexOf: Map<string, number>;
-  /** Total node count in the country column (top-N + "Other" per populated continent), for sizing the layout. */
-  countryNodeCount: number;
-  /** Sum of values in the country column == sum of populated continents' totals, for sizing the layout. */
-  countryValueSum: number;
 }
 
 /** Sankey diagram of global CO2 emissions: World -> continents/transport -> top countries. */
@@ -106,8 +101,6 @@ export class SankeyChart {
       nodes: [],
       links: [],
       indexOf: new Map(),
-      countryNodeCount: 0,
-      countryValueSum: 0,
     };
     const worldValue = this.dataset.valueInYear('World', year);
     if (worldValue === undefined || worldValue <= EPSILON) return builder;
@@ -124,7 +117,6 @@ export class SankeyChart {
       builder.links.push({ source: worldIndex, target: index, value });
 
       if (!isBunker) {
-        builder.countryValueSum += value;
         this.addCountries(builder, name, year, index, color, value);
       }
     }
@@ -151,14 +143,12 @@ export class SankeyChart {
     for (const { country, value } of top) {
       const index = this.addNode(builder, country, color);
       builder.links.push({ source: parentIndex, target: index, value });
-      builder.countryNodeCount += 1;
     }
 
     const other = continentValue - top.reduce((sum, c) => sum + c.value, 0);
     if (other > EPSILON) {
       const index = this.addNode(builder, `Other ${continent}`, color);
       builder.links.push({ source: parentIndex, target: index, value: other });
-      builder.countryNodeCount += 1;
     }
   }
 
@@ -178,13 +168,13 @@ export class SankeyChart {
       return;
     }
 
-    const width = Math.max(this.container.clientWidth, MIN_WIDTH);
-    // Size the country column to exactly VALUE_SCALE px/Mt (the layout's binding ky),
-    // so node sizes stay stable across years. Assumes d3-sankey's nodePadding isn't
-    // capped, i.e. VALUE_SCALE * countryValueSum >= MARGIN.top + MARGIN.bottom.
+    // Fixed footprint regardless of year: as totals grow, ky shrinks and bars get
+    // thinner, so a continent's share of the World bar stays visually comparable
+    // across years instead of the whole chart growing.
+    const width = Math.max(this.container.clientWidth - 2 * CONTAINER_PADDING, MIN_WIDTH);
     const height = Math.max(
+      this.container.clientHeight - 2 * CONTAINER_PADDING - TITLE_RESERVED_HEIGHT,
       MIN_HEIGHT,
-      VALUE_SCALE * builder.countryValueSum + (builder.countryNodeCount - 1) * NODE_PADDING,
     );
     this.svg.attr('width', width).attr('height', height);
 
@@ -207,20 +197,6 @@ export class SankeyChart {
     this.renderNodes(graph.nodes as Node[], visibleLabels);
   }
 
-/*
-private renderLinks(links: Link[]): void {
-  const sel = this.svg
-    .selectAll<SVGPathElement, Link>('path.sankey-link')
-    .data(links)
-    .join('path')
-    .attr('class', 'sankey-link')
-    .attr('d', sankeyLinkHorizontal())
-    .attr('stroke-width', (d) => Math.max(1, d.width ?? 1))
-    .attr('fill', 'none')                                      // ← add this
-    .attr('stroke', (d) => (d.source as Node).color)          // ← was .attr('fill', ...)
-    .attr('stroke-opacity', 0.4);                             // optional, conventional
-*/
-
   private renderLinks(links: Link[]): void {
     const sel = this.svg
       .selectAll<SVGPathElement, Link>('path.sankey-link')
@@ -229,7 +205,7 @@ private renderLinks(links: Link[]): void {
       .attr('class', 'sankey-link')
       .attr('d', sankeyLinkHorizontal())
       .attr('stroke-width', (d) => Math.max(1, d.width ?? 1))
-      .attr('fill', 'none')                            
+      .attr('fill', 'none')
       .attr('stroke', (d) => (d.source as Node).color);
 
     sel
@@ -304,10 +280,10 @@ private renderLinks(links: Link[]): void {
     return visible;
   }
 
-  /** World above its node; continents to the left; countries/"Other" to the right. */
+  /** World above its own left edge (aligned with the heading); continents to the left of theirs; countries/"Other" to the right. */
   private labelX(d: Node): number {
-    if (d.depth === 0) return (d.x0! + d.x1!) / 2;
     if (d.depth === 1) return d.x0! - LABEL_GAP;
+    if (d.depth === 0) return d.x0!;
     return d.x1! + LABEL_GAP;
   }
 
@@ -317,9 +293,7 @@ private renderLinks(links: Link[]): void {
   }
 
   private labelAnchor(d: Node): string {
-    if (d.depth === 0) return 'middle';
-    if (d.depth === 1) return 'end';
-    return 'start';
+    return d.depth === 1 ? 'end' : 'start';
   }
 
   private formatValue(value: number): string {

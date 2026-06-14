@@ -271,12 +271,13 @@ body {
 /* Sankey chart (Global emissions) */
 .sankey-chart {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   padding: 16px;
 }
 
 .sankey-chart__title {
   margin: 0 0 8px;
+  padding-left: 3rem;
   font-size: 15px;
   font-weight: 600;
 }
@@ -288,6 +289,10 @@ body {
 
 .sankey-chart__empty--hidden {
   display: none;
+}
+
+.sankey-chart__svg {
+  display: block;
 }
 
 .sankey-chart__svg text {
