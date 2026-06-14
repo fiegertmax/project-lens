@@ -1,20 +1,23 @@
-import { format, scaleOrdinal, schemeTableau10, select } from 'd3';
+import { scaleOrdinal, schemeTableau10, select } from 'd3';
 import type { ScaleOrdinal, Selection } from 'd3';
-import { sankey, sankeyLeft, sankeyLinkHorizontal } from 'd3-sankey';
-import type { SankeyLink, SankeyNode } from 'd3-sankey';
 import { SANKEY_TOP_COUNTRIES } from '../config';
-import { BUNKER_ENTITIES, CONTINENTS, COUNTRY_TO_CONTINENT, FOCUSABLE_CONTINENTS } from '../data/continents';
+import { BUNKER_ENTITIES, CONTINENTS, FOCUSABLE_CONTINENTS } from '../data/continents';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-
-/** Links/nodes below this value (million tonnes) are dropped as visual noise. */
-const EPSILON = 0.05;
+import { SankeyDetailLens } from './SankeyDetailLens';
+import { computeVisibleLabels, SankeyDiagram } from './SankeyDiagram';
+import type { SankeyExtent } from './SankeyDiagram';
+import {
+  addNode,
+  buildRootGraph,
+  countriesOfContinent,
+  createGraphBuilder,
+  EPSILON,
+} from './sankeyGraph';
+import type { GraphBuilder } from './sankeyGraph';
 
 const WORLD_COLOR = '#6b6375';
 const BUNKER_COLOR = '#b9b9c2';
 
-const NODE_WIDTH = 16;
-const NODE_PADDING = 3;
-const LABEL_GAP = 6;
 /** left matches .sankey-chart__title's padding-left, so the World label aligns with the heading. */
 const MARGIN = { top: 24, right: 220, bottom: 10, left: 45 };
 const MIN_WIDTH = 640;
@@ -23,30 +26,11 @@ const MIN_HEIGHT = 480;
 const CONTAINER_PADDING = 16;
 /** Reserved space above the SVG for .sankey-chart__title (line height + margin-bottom). */
 const TITLE_RESERVED_HEIGHT = 30;
-/** Minimum vertical distance between kept label centers in a column, to avoid overlap (~1.2x the 11px font-size). */
-const LABEL_LINE_HEIGHT = 13;
 
-const VALUE_FORMAT = format(',.0f');
-
-interface NodeDatum {
-  name: string;
-  color: string;
-}
-
-type Node = SankeyNode<NodeDatum, object>;
-type Link = SankeyLink<NodeDatum, object>;
-
-interface RawLink {
-  source: number;
-  target: number;
-  value: number;
-}
-
-/** Mutable accumulator while walking World -> continents -> top countries. */
-interface GraphBuilder {
-  nodes: NodeDatum[];
-  links: RawLink[];
-  indexOf: Map<string, number>;
+interface GlobalGraph {
+  builder: GraphBuilder;
+  /** Country names shown as individual nodes (not folded into "Other X"). */
+  shownCountries: Set<string>;
 }
 
 /** Sankey diagram of global CO2 emissions: World -> continents/transport -> top countries. */
@@ -55,6 +39,8 @@ export class SankeyChart {
   private readonly title: HTMLHeadingElement;
   private readonly empty: HTMLParagraphElement;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
+  private readonly diagram: SankeyDiagram;
+  private readonly lens: SankeyDetailLens;
   private readonly dataset: EmissionsDataset;
   private readonly continentColor: ScaleOrdinal<string, string>;
 
@@ -76,14 +62,13 @@ export class SankeyChart {
     this.container.append(this.title, this.empty);
 
     this.svg = select(this.container).append('svg').attr('class', 'sankey-chart__svg');
+    const diagramGroup = this.svg.append('g').attr('class', 'sankey-diagram');
+    this.diagram = new SankeyDiagram(diagramGroup);
+    this.lens = new SankeyDetailLens(this.svg, dataset);
   }
 
   /** Rebuild the diagram for the given year, optionally zoomed into one continent. */
   update(year: number, focusContinent: string | null): void {
-    const builder = focusContinent !== null
-      ? this.buildFocusedGraph(focusContinent, year)
-      : this.buildGraph(year);
-
     this.title.textContent = focusContinent !== null
       ? `${focusContinent} CO₂ emissions, ${year} (million tonnes)`
       : `Global CO₂ emissions, ${year} (million tonnes)`;
@@ -91,8 +76,7 @@ export class SankeyChart {
       ? `No emissions data for ${focusContinent} in this year.`
       : 'No global emissions data for this year.';
 
-    this.empty.classList.toggle('sankey-chart__empty--hidden', builder.nodes.length > 0);
-    this.render(builder);
+    this.render(year, focusContinent);
   }
 
   /** Root element, used by the app to toggle visibility between base visualizations. */
@@ -104,102 +88,7 @@ export class SankeyChart {
     this.container.remove();
   }
 
-  /** World -> populated continents/transport -> top countries (+ "Other <continent>"). */
-  private buildGraph(year: number): GraphBuilder {
-    const builder: GraphBuilder = {
-      nodes: [],
-      links: [],
-      indexOf: new Map(),
-    };
-    const worldValue = this.dataset.valueInYear('World', year);
-    if (worldValue === undefined || worldValue <= EPSILON) return builder;
-
-    const worldIndex = this.addNode(builder, 'World', WORLD_COLOR);
-
-    for (const name of [...CONTINENTS, ...BUNKER_ENTITIES]) {
-      const value = this.dataset.valueInYear(name, year);
-      if (value === undefined || value <= EPSILON) continue;
-
-      const isBunker = (BUNKER_ENTITIES as readonly string[]).includes(name);
-      const color = isBunker ? BUNKER_COLOR : this.continentColor(name);
-      const index = this.addNode(builder, name, color);
-      builder.links.push({ source: worldIndex, target: index, value });
-
-      if (!isBunker) {
-        this.addCountries(builder, name, year, index, color, value);
-      }
-    }
-
-    return builder;
-  }
-
-  /** Top emitters for one continent, plus an "Other <continent>" remainder node. */
-  private addCountries(
-    builder: GraphBuilder,
-    continent: string,
-    year: number,
-    parentIndex: number,
-    color: string,
-    continentValue: number,
-  ): void {
-    const countries = this.countriesOfContinent(continent, year);
-
-    const top = countries.slice(0, SANKEY_TOP_COUNTRIES);
-    for (const { country, value } of top) {
-      const index = this.addNode(builder, country, color);
-      builder.links.push({ source: parentIndex, target: index, value });
-    }
-
-    const other = continentValue - top.reduce((sum, c) => sum + c.value, 0);
-    if (other > EPSILON) {
-      const index = this.addNode(builder, `Other ${continent}`, color);
-      builder.links.push({ source: parentIndex, target: index, value: other });
-    }
-  }
-
-  /** <Continent> -> ALL of its countries (no "Other", no top-N limiting). */
-  private buildFocusedGraph(continent: string, year: number): GraphBuilder {
-    const builder: GraphBuilder = { nodes: [], links: [], indexOf: new Map() };
-
-    const countries = this.countriesOfContinent(continent, year);
-    if (countries.length === 0) return builder;
-
-    const color = this.continentColor(continent);
-    const rootIndex = this.addNode(builder, continent, color);
-
-    for (const { country, value } of countries) {
-      const index = this.addNode(builder, country, color);
-      builder.links.push({ source: rootIndex, target: index, value });
-    }
-
-    return builder;
-  }
-
-  /** All countries of a continent with data this year, sorted by descending emissions. */
-  private countriesOfContinent(continent: string, year: number): { country: string; value: number }[] {
-    return Object.entries(COUNTRY_TO_CONTINENT)
-      .filter(([, c]) => c === continent)
-      .map(([country]) => ({ country, value: this.dataset.valueInYear(country, year) }))
-      .filter((c): c is { country: string; value: number } => c.value !== undefined && c.value > EPSILON)
-      .sort((a, b) => b.value - a.value);
-  }
-
-  private addNode(builder: GraphBuilder, name: string, color: string): number {
-    const existing = builder.indexOf.get(name);
-    if (existing !== undefined) return existing;
-    const index = builder.nodes.length;
-    builder.nodes.push({ name, color });
-    builder.indexOf.set(name, index);
-    return index;
-  }
-
-  private render(builder: GraphBuilder): void {
-    const { nodes, links } = builder;
-    if (nodes.length === 0) {
-      this.svg.attr('width', 0).attr('height', 0);
-      return;
-    }
-
+  private render(year: number, focusContinent: string | null): void {
     // Fixed footprint regardless of year: as totals grow, ky shrinks and bars get
     // thinner, so a continent's share of the World bar stays visually comparable
     // across years instead of the whole chart growing.
@@ -208,132 +97,129 @@ export class SankeyChart {
       this.container.clientHeight - 2 * CONTAINER_PADDING - TITLE_RESERVED_HEIGHT,
       MIN_HEIGHT,
     );
+    const extent: SankeyExtent = [
+      [MARGIN.left, MARGIN.top],
+      [width - MARGIN.right, height - MARGIN.bottom],
+    ];
+
+    let builder: GraphBuilder;
+    let shownCountries: Set<string>;
+
+    if (focusContinent !== null) {
+      builder = this.buildFocusedGraph(focusContinent, year);
+      shownCountries = new Set();
+    } else {
+      ({ builder, shownCountries } = this.buildGlobalGraph(year, extent));
+    }
+
+    this.empty.classList.toggle('sankey-chart__empty--hidden', builder.nodes.length > 0);
+
+    if (builder.nodes.length === 0) {
+      this.svg.attr('width', 0).attr('height', 0);
+      this.lens.update([], year, shownCountries);
+      return;
+    }
+
     this.svg.attr('width', width).attr('height', height);
-
-    const layout = sankey<NodeDatum, object>()
-      .nodeAlign(sankeyLeft)
-      .nodeWidth(NODE_WIDTH)
-      .nodePadding(NODE_PADDING)
-      .extent([
-        [MARGIN.left, MARGIN.top],
-        [width - MARGIN.right, height - MARGIN.bottom],
-      ]);
-
-    const graph = layout({
-      nodes: nodes.map((n) => ({ ...n })),
-      links: links.map((l) => ({ ...l })),
-    });
-
-    const graphNodes = graph.nodes as Node[];
-    const maxDepth = Math.max(...graphNodes.map((n) => n.depth ?? 0));
-
-    const visibleLabels = this.computeVisibleLabels(graphNodes);
-    this.renderLinks(graph.links as Link[]);
-    this.renderNodes(graphNodes, visibleLabels, maxDepth);
-  }
-
-  private renderLinks(links: Link[]): void {
-    const sel = this.svg
-      .selectAll<SVGPathElement, Link>('path.sankey-link')
-      .data(links)
-      .join('path')
-      .attr('class', 'sankey-link')
-      .attr('d', sankeyLinkHorizontal())
-      .attr('stroke-width', (d) => Math.max(1, d.width ?? 1))
-      .attr('fill', 'none')
-      .attr('stroke', (d) => (d.source as Node).color);
-
-    sel
-      .selectAll('title')
-      .data((d) => [d])
-      .join('title')
-      .text((d) => `${(d.source as Node).name} → ${(d.target as Node).name}: ${this.formatValue(d.value)}`);
-  }
-
-  private renderNodes(nodes: Node[], visibleLabels: Set<Node>, maxDepth: number): void {
-    const groups = this.svg
-      .selectAll<SVGGElement, Node>('g.sankey-node')
-      .data(nodes)
-      .join('g')
-      .attr('class', 'sankey-node');
-
-    groups
-      .selectAll('rect')
-      .data((d) => [d])
-      .join('rect')
-      .attr('x', (d) => d.x0!)
-      .attr('y', (d) => d.y0!)
-      .attr('width', (d) => d.x1! - d.x0!)
-      .attr('height', (d) => Math.max(1, d.y1! - d.y0!))
-      .attr('fill', (d) => d.color);
-
-    groups
-      .selectAll('title')
-      .data((d) => [d])
-      .join('title')
-      .text((d) => `${d.name}: ${this.formatValue(d.value ?? 0)}`);
-
-    groups
-      .selectAll<SVGTextElement, Node>('text')
-      .data((d) => (visibleLabels.has(d) ? [d] : []))
-      .join('text')
-      .attr('class', 'sankey-label')
-      .attr('x', (d) => this.labelX(d, maxDepth))
-      .attr('y', (d) => this.labelY(d))
-      .attr('text-anchor', (d) => this.labelAnchor(d, maxDepth))
-      .attr('dy', (d) => (d.depth === 0 ? '0' : '0.35em'))
-      .text((d) => `${d.name} (${this.formatValue(d.value ?? 0)})`);
+    const graphNodes = this.diagram.draw(builder, extent);
+    this.lens.update(graphNodes, year, shownCountries);
   }
 
   /**
-   * Per depth-column, keep the first node's label and any subsequent label whose center
-   * is at least LABEL_LINE_HEIGHT px below the last kept label's center (avoids overlap
-   * while showing as many labels as fit, unlike a per-node minimum-height check).
+   * Iteratively build the global graph: after each layout pass, fold any unlabelled
+   * country node into "Other X" and rebuild until every direct node has a label.
+   *
+   * Convergence is guaranteed because `excluded` only grows (each pass adds at least
+   * one name) and the candidate pool per continent is bounded by SANKEY_TOP_COUNTRIES.
    */
-  private computeVisibleLabels(nodes: Node[]): Set<Node> {
-    const visible = new Set<Node>();
-    const columns = new Map<number, Node[]>();
-    for (const node of nodes) {
-      const depth = node.depth ?? 0;
-      const column = columns.get(depth);
-      if (column) column.push(node);
-      else columns.set(depth, [node]);
+  private buildGlobalGraph(year: number, extent: SankeyExtent): GlobalGraph {
+    const excluded = new Set<string>();
+    let current = this.buildGraph(year, excluded);
+
+    while (current.builder.nodes.length > 0) {
+      const layoutNodes = this.diagram.layoutOnly(current.builder, extent);
+      const visible = computeVisibleLabels(layoutNodes);
+      const maxDepth = Math.max(...layoutNodes.map((n) => n.depth ?? 0));
+
+      const unlabeled = layoutNodes
+        .filter((n) => n.depth === maxDepth && !n.name.startsWith('Other ') && !visible.has(n))
+        .map((n) => n.name);
+
+      if (unlabeled.length === 0) return current;
+
+      for (const name of unlabeled) excluded.add(name);
+      current = this.buildGraph(year, excluded);
     }
 
-    for (const column of columns.values()) {
-      column.sort((a, b) => a.y0! - b.y0!);
-      let lastCenter = -Infinity;
-      for (const node of column) {
-        const center = (node.y0! + node.y1!) / 2;
-        if (center - lastCenter >= LABEL_LINE_HEIGHT) {
-          visible.add(node);
-          lastCenter = center;
-        }
+    return current;
+  }
+
+  /** World -> populated continents/transport -> top countries (+ "Other <continent>"). */
+  private buildGraph(year: number, excludedCountries: Set<string>): GlobalGraph {
+    const builder = createGraphBuilder();
+    const shownCountries = new Set<string>();
+
+    const worldValue = this.dataset.valueInYear('World', year);
+    if (worldValue === undefined || worldValue <= EPSILON) return { builder, shownCountries };
+
+    const worldIndex = addNode(builder, 'World', WORLD_COLOR);
+
+    for (const name of [...CONTINENTS, ...BUNKER_ENTITIES]) {
+      const value = this.dataset.valueInYear(name, year);
+      if (value === undefined || value <= EPSILON) continue;
+
+      const isBunker = (BUNKER_ENTITIES as readonly string[]).includes(name);
+      const color = isBunker ? BUNKER_COLOR : this.continentColor(name);
+      const index = addNode(builder, name, color);
+      builder.links.push({ source: worldIndex, target: index, value });
+
+      if (!isBunker) {
+        const shown = this.addCountries(builder, name, year, index, color, value, excludedCountries);
+        for (const c of shown) shownCountries.add(c);
       }
     }
 
-    return visible;
+    return { builder, shownCountries };
   }
 
-  /** Root above its own left edge (aligned with the heading); middle columns to the
-   *  left of theirs; the last (leaf) column to the right. */
-  private labelX(d: Node, maxDepth: number): number {
-    if (d.depth === 0) return d.x0!;
-    if (d.depth === maxDepth) return d.x1! + LABEL_GAP;
-    return d.x0! - LABEL_GAP;
+  /**
+   * Adds up to SANKEY_TOP_COUNTRIES direct country nodes for a continent, skipping
+   * `excludedCountries`, then adds an "Other <continent>" node for the remainder.
+   * Returns the names of countries added as direct nodes.
+   */
+  private addCountries(
+    builder: GraphBuilder,
+    continent: string,
+    year: number,
+    parentIndex: number,
+    color: string,
+    continentValue: number,
+    excludedCountries: Set<string>,
+  ): string[] {
+    const countries = countriesOfContinent(this.dataset, continent, year);
+
+    // Only the original top-N are ever candidates; do NOT promote rank 4+ as replacements.
+    const top = countries
+      .slice(0, SANKEY_TOP_COUNTRIES)
+      .filter((c) => !excludedCountries.has(c.country));
+
+    for (const { country, value } of top) {
+      const index = addNode(builder, country, color);
+      builder.links.push({ source: parentIndex, target: index, value });
+    }
+
+    const other = continentValue - top.reduce((sum, c) => sum + c.value, 0);
+    if (other > EPSILON) {
+      const index = addNode(builder, `Other ${continent}`, color);
+      builder.links.push({ source: parentIndex, target: index, value: other });
+    }
+
+    return top.map((c) => c.country);
   }
 
-  private labelY(d: Node): number {
-    if (d.depth === 0) return d.y0! - LABEL_GAP;
-    return (d.y0! + d.y1!) / 2;
-  }
-
-  private labelAnchor(d: Node, maxDepth: number): string {
-    if (d.depth === 0 || d.depth === maxDepth) return 'start';
-    return 'end';
-  }
-
-  private formatValue(value: number): string {
-    return `${VALUE_FORMAT(value)} Mt`;
+  /** <Continent> -> ALL of its countries (no "Other", no top-N limiting). */
+  private buildFocusedGraph(continent: string, year: number): GraphBuilder {
+    const countries = countriesOfContinent(this.dataset, continent, year);
+    return buildRootGraph(continent, this.continentColor(continent), countries);
   }
 }

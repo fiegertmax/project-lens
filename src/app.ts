@@ -16,6 +16,7 @@ import type { YearRange } from './state/AppState';
 import { LensState } from './state/LensState';
 import { ConfigPanel } from './ui/ConfigPanel';
 import { LensPanel } from './ui/LensPanel';
+import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
 export class App {
@@ -58,6 +59,7 @@ export class App {
 
     new ConfigPanel(sidebar, dataset, state, bounds);
     const lensPanel = new LensPanel(sidebar, lens);
+    const sankeyLensPanel = new SankeyLensPanel(sidebar);
     const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
     const sankey = new SankeyChart(main, dataset);
 
@@ -66,6 +68,7 @@ export class App {
       charts.node().style.display = isByCountry ? '' : 'none';
       sankey.node().style.display = isByCountry ? 'none' : '';
       lensPanel.root.style.display = isByCountry ? '' : 'none';
+      sankeyLensPanel.root.style.display = isByCountry ? 'none' : '';
       if (isByCountry) charts.update();
       else sankey.update(state.globalYear(), state.focusedContinent());
     };

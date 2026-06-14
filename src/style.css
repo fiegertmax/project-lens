@@ -330,6 +330,15 @@ body {
   stroke-width: 1;
 }
 
+/* "Other <continent>" detail lens: hover panel with an embedded mini-Sankey */
+.sankey-lens__bg {
+  fill: var(--bg);
+  stroke: var(--lens-border);
+  stroke-width: 1.5;
+  rx: 10;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.18));
+}
+
 .line-chart {
   position: relative; /* anchors the in-lens combine overlay */
   margin-bottom: 8px;
@@ -789,4 +798,26 @@ body.lens-dragging {
 .lens-panel__status {
   color: var(--text-muted);
   font-size: 13px;
+}
+
+/* Sankey hover-lens info panel */
+.sankey-lens-panel__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sankey-lens-panel__term {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sankey-lens-panel__desc {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
