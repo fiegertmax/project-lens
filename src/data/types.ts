@@ -20,7 +20,7 @@ export interface CountrySeries {
 }
 
 /** Extracts a comparable numeric metric from a raw CSV cell value. */
-export type MetricKey = 'co2';
+export type MetricKey = 'co2' | 'co2_including_luc';
 
 export interface MetricDefinition {
   key: MetricKey;

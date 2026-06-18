@@ -5,13 +5,7 @@ import type { LensEffectKey } from './lens/effects';
 export const DATA_URL = `${import.meta.env.BASE_URL}data/owid-co2-data.csv`;
 
 /** Entities shown on first load (names as stored in the dataset). */
-export const DEFAULT_COUNTRIES: readonly string[] = [
-  'Germany',
-  'United States',
-  'China',
-  'Russia',
-  'India',
-];
+export const DEFAULT_COUNTRIES: readonly string[] = ['Germany'];
 
 /** Requested 1950–2025; the dataset ends at 2024, so the max is clamped on load. */
 export const DEFAULT_YEAR_RANGE: readonly [number, number] = [1950, 2025];
@@ -30,9 +24,15 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     label: 'Annual CO₂ emissions',
     unit: 'million tonnes',
   },
+  co2_including_luc: {
+    key: 'co2_including_luc',
+    column: 'co2_including_luc',
+    label: 'Annual CO₂ (incl. LUC)',
+    unit: 'million tonnes',
+  },
 };
 
-export const DEFAULT_METRIC: MetricDefinition = METRICS.co2;
+export const DEFAULT_METRIC: MetricDefinition = METRICS.co2_including_luc;
 
 /** Auxiliary columns retained for lens effects (read directly, never recomputed). */
 export const EXTRA_COLUMNS: readonly string[] = [
