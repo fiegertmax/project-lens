@@ -6,19 +6,17 @@ import {
   DATA_URL,
   DEFAULT_COUNTRIES,
   DEFAULT_GLOBAL_YEAR,
-  DEFAULT_LENS_EFFECT,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
   EXTRA_COLUMNS,
-  LENS_WIDTH,
 } from './config';
 import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
-import { LensState } from './state/LensState';
+import { CountryLensState } from './state/CountryLensState';
 import { PieLensState } from './state/PieLensState';
 import { ConfigPanel } from './ui/ConfigPanel';
-import { LensPanel } from './ui/LensPanel';
+import { LensStagePanel } from './ui/LensStagePanel';
 import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
@@ -38,18 +36,16 @@ export class App {
     const range = this.clampRange(bounds);
     const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
     const pieLens = new PieLensState();
-    // Default center at the middle of the default year range
-    const defaultCenter = Math.round((range[0] + range[1]) / 2);
-    const lens = new LensState(DEFAULT_LENS_EFFECT, LENS_WIDTH.default, defaultCenter);
+    const lensState = new CountryLensState();
 
-    this.render(dataset, state, pieLens, lens, bounds);
+    this.render(dataset, state, pieLens, lensState, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
     pieLens: PieLensState,
-    lens: LensState,
+    lensState: CountryLensState,
     bounds: YearRange,
   ): void {
     this.root.innerHTML = '';
@@ -62,9 +58,9 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds);
-    new LensPanel(sidebar, lens);
+    new LensStagePanel(sidebar, lensState);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
-    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lens);
+    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState);
     const sankey = new SankeyChart(main, dataset);
     const pie = new PieChart(main, dataset);
     const pieManager = new PieLensManager({

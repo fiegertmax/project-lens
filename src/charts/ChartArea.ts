@@ -2,9 +2,10 @@ import { scaleOrdinal, schemeTableau10 } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
-import type { LensState } from '../state/LensState';
+import type { CountryLensState } from '../state/CountryLensState';
 import { CombinedChart } from './CombinedChart';
 import type { LineDragCallbacks } from './drag-types';
+import { LensSync } from './LensSync';
 import { SingleCountryChart } from './SingleCountryChart';
 
 type DropTarget =
@@ -24,7 +25,8 @@ export class ChartArea {
   private readonly metric: MetricDefinition;
   private readonly unsub: () => void;
 
-  private readonly lensState: LensState | null;
+  private readonly lensState: CountryLensState;
+  private readonly lensSync: LensSync;
 
   // Extraction state — never written to AppState (D-14)
   private extractedCountries: string[] = [];
@@ -43,12 +45,13 @@ export class ChartArea {
     dataset: EmissionsDataset,
     state: AppState,
     metric: MetricDefinition,
-    lensState: LensState | null = null,
+    lensState: CountryLensState,
   ) {
     this.dataset = dataset;
     this.state = state;
     this.metric = metric;
     this.lensState = lensState;
+    this.lensSync = new LensSync(lensState);
 
     this.div = document.createElement('div');
     this.div.className = 'chart-area';
@@ -66,17 +69,7 @@ export class ChartArea {
     this.dropSpacer.className = 'chart-area__drop-spacer';
     this.div.appendChild(this.dropSpacer);
 
-    // Ctrl/Cmd + scroll (or trackpad pinch) resizes the lens width;
-    // SingleCountryChart's LensState subscription handles the re-render.
-    if (this.lensState) {
-      const lens = this.lensState;
-      this.div.addEventListener('wheel', (e: WheelEvent) => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 1 : -1;
-        lens.setWidth(lens.currentWidth() + delta);
-      }, { passive: false });
-    }
+    // Ctrl/Cmd wheel resize is now handled per-lens in SingleCountryChart (Plan 04).
 
     this.onEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') this.cancelDrag();
@@ -142,7 +135,7 @@ export class ChartArea {
     // Wire callbacks into combined chart
     this.combinedChart.callbacks = callbacks;
 
-    // (5) Create rows for newly extracted countries
+    // (5) Create rows for newly extracted countries; wire lens state/sync (LENS-01: single-country only)
     for (const country of this.extractedCountries) {
       if (!this.rows.has(country)) {
         const chart = new SingleCountryChart(
@@ -153,8 +146,7 @@ export class ChartArea {
           this.colorFor,
         );
         chart.callbacks = callbacks;
-        // LensState wiring removed: Plan 04-04 replaced setLens() with setLensState().
-        // Plan 05 will wire CountryLensState + LensSync into new rows here.
+        chart.setLensState(this.lensState, this.lensSync);
         this.rows.set(country, chart);
       }
     }
