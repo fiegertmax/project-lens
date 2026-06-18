@@ -1167,3 +1167,31 @@ body.line-dragging {
 .single-country-chart--lens-active .single-country-chart__slope {
   display: block;
 }
+
+/* SVG fills the 1/3 slope panel container */
+.slope-chart__svg {
+  width: 100%;
+}
+
+/* Slope lines; per-source stroke color is set inline (mirrors .line-ghost pattern) */
+.slope-chart__line {
+  fill: none;
+  stroke-width: 2;
+}
+
+/* Value labels beside the slope endpoints; fill set inline to match source color */
+.slope-chart__label {
+  font-size: 11px;
+}
+
+/* Boundary-year tick labels on the x-axis */
+.slope-chart__column-label {
+  font-size: 11px;
+  fill: var(--text-muted);
+}
+
+/* Axis/grid chrome matches muted chart border color */
+.slope-chart__axis path,
+.slope-chart__axis line {
+  stroke: var(--border);
+}
