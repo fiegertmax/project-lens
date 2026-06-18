@@ -1,6 +1,7 @@
 import {
   axisBottom,
   axisLeft,
+  drag,
   format,
   line,
   scaleLinear,
@@ -8,11 +9,12 @@ import {
   schemeTableau10,
   select,
 } from 'd3';
-import type { ScaleLinear, Selection } from 'd3';
+import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
 import { resolveSeries } from '../utils/interpolation';
+import type { LineDragCallbacks } from './drag-types';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -50,6 +52,15 @@ export class CombinedChart {
   private readonly plot: SvgGroup;
   private readonly unsub: () => void;
 
+  /** Externally-supplied country list; overrides state.selectedCountries() in update(). */
+  private countries: string[];
+
+  /** Optional shared color function from ChartArea; prevents color shifts on extraction. */
+  colorFor?: (c: string) => string;
+
+  /** Drag callbacks set by ChartArea after construction. */
+  callbacks?: LineDragCallbacks;
+
   constructor(
     parent: HTMLElement,
     dataset: EmissionsDataset,
@@ -59,6 +70,8 @@ export class CombinedChart {
     this.dataset = dataset;
     this.state = state;
     this.metric = metric;
+    // Initialize from current selection so first paint matches existing behavior
+    this.countries = state.selectedCountries();
     this.root = select(parent).append('div').attr('class', 'combined-chart');
     this.svg = this.root.append('svg').attr('class', 'combined-chart__svg');
     this.plot = this.svg
@@ -76,6 +89,12 @@ export class CombinedChart {
     this.root.remove();
   }
 
+  /** Replace the rendered country list (e.g. after extraction) and re-render. */
+  updateCountries(countries: string[]): void {
+    this.countries = countries;
+    this.update();
+  }
+
   update(): void {
     const width = this.root.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
@@ -84,7 +103,8 @@ export class CombinedChart {
     this.svg.attr('width', width).attr('height', HEIGHT);
 
     const yearRange = this.state.yearRange();
-    const countries = this.state.selectedCountries();
+    // Use externally-supplied list; ChartArea overrides via updateCountries()
+    const countries = this.countries;
 
     const entries: SeriesEntry[] = countries.map((country) => {
       const series = this.dataset.series(country);
@@ -95,7 +115,10 @@ export class CombinedChart {
     const [yMin, yMax] = computeYDomain(entries);
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
-    const color = scaleOrdinal(countries, schemeTableau10 as readonly string[]);
+    // Prefer shared colorFor to avoid color shifts when countries are extracted
+    const color = this.colorFor
+      ? this.colorFor
+      : (c: string) => scaleOrdinal(countries, schemeTableau10 as readonly string[])(c);
 
     this.renderAxes(x, y, innerH);
     this.renderLines(entries, x, y, color, innerW, innerH);
@@ -154,7 +177,72 @@ export class CombinedChart {
       .on('mouseover', (_event, d) => this.highlight(d.country))
       .on('mouseout', () => this.clearHighlight());
 
+    this.renderDragOverlays(entries, generator);
     this.renderEmptyNotice(entries, innerW, innerH);
+  }
+
+  /**
+   * Renders 12px transparent overlay paths for drag hit area.
+   * Drag is bound in the ENTER branch only to avoid stacking listeners on re-render.
+   */
+  private renderDragOverlays(
+    entries: SeriesEntry[],
+    generator: (points: DataPoint[]) => string | null,
+  ): void {
+    const self = this;
+    this.group('drag-overlays')
+      .selectAll<SVGPathElement, SeriesEntry>('path.combined-line-hit')
+      .data(entries, (d) => d.country)
+      .join(
+        (enter) =>
+          enter
+            .append('path')
+            .attr('class', 'combined-line-hit')
+            .attr('fill', 'none')
+            .attr('stroke', 'transparent')
+            .attr('stroke-width', 12)
+            .attr('pointer-events', 'stroke')
+            .attr('cursor', 'grab')
+            // Bind drag once on enter only — avoids stacking listeners (anti-pattern)
+            .call(
+              drag<SVGPathElement, SeriesEntry>()
+                .on('start', function (ev: D3DragEvent<SVGPathElement, SeriesEntry, unknown>, d) {
+                  // Dim source line directly (no transition during drag — Pitfall 4)
+                  self
+                    .group('lines')
+                    .select<SVGPathElement>(`path.combined-line[data-country="${d.country}"]`)
+                    .attr('opacity', 0.2);
+                  // Use sourceEvent viewport coords — never ev.x (SVG-local, Pitfall 1)
+                  self.callbacks?.onDragStart(
+                    d.country,
+                    ev.sourceEvent.clientX,
+                    ev.sourceEvent.clientY,
+                  );
+                })
+                .on('drag', function (ev: D3DragEvent<SVGPathElement, SeriesEntry, unknown>, d) {
+                  self.callbacks?.onDragMove(
+                    d.country,
+                    ev.sourceEvent.clientX,
+                    ev.sourceEvent.clientY,
+                  );
+                })
+                .on('end', function (ev: D3DragEvent<SVGPathElement, SeriesEntry, unknown>, d) {
+                  // Restore source line opacity
+                  self
+                    .group('lines')
+                    .select<SVGPathElement>(`path.combined-line[data-country="${d.country}"]`)
+                    .attr('opacity', 1);
+                  self.callbacks?.onDragEnd(
+                    d.country,
+                    ev.sourceEvent.clientX,
+                    ev.sourceEvent.clientY,
+                  );
+                }),
+            ),
+        (update) => update,
+        (exit) => exit.remove(),
+      )
+      .attr('d', (d) => generator(d.points) ?? '');
   }
 
   private renderLegend(countries: string[], color: (c: string) => string, innerW: number): void {
