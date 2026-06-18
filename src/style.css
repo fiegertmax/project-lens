@@ -1135,3 +1135,35 @@ body.line-dragging {
 .single-country-chart__svg {
   width: 100%;
 }
+
+/* Horizontal container: line chart left, slope panel right */
+.single-country-chart__body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Line chart fills full body width when no lens is active (SLOPE-01 default) */
+.single-country-chart__line {
+  flex: 1 1 100%;
+  min-width: 0; /* allows SVG to shrink inside flex */
+}
+
+/* Slope panel reserves 1/3 width but stays hidden until a lens is active (SLOPE-02) */
+.single-country-chart__slope {
+  flex: 0 0 33.333%;
+  min-width: 0;
+  display: none;
+}
+
+/* Lens-active modifier: shrink line chart to 2/3 (SLOPE-01) */
+.single-country-chart--lens-active .single-country-chart__line {
+  flex-basis: 66.666%;
+}
+
+/* Lens-active modifier: reveal the slope panel (SLOPE-01) */
+.single-country-chart--lens-active .single-country-chart__slope {
+  display: block;
+}
