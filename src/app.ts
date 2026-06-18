@@ -1,4 +1,4 @@
-import { ChartStack } from './charts/ChartStack';
+import { ChartArea } from './charts/ChartArea';
 import { PieChart } from './charts/PieChart';
 import { PieLensManager } from './charts/PieLensManager';
 import { SankeyChart } from './charts/SankeyChart';
@@ -6,19 +6,15 @@ import {
   DATA_URL,
   DEFAULT_COUNTRIES,
   DEFAULT_GLOBAL_YEAR,
-  DEFAULT_LENS_EFFECT,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
   EXTRA_COLUMNS,
-  LENS_WIDTH,
 } from './config';
 import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
-import { LensState } from './state/LensState';
 import { PieLensState } from './state/PieLensState';
 import { ConfigPanel } from './ui/ConfigPanel';
-import { LensPanel } from './ui/LensPanel';
 import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
@@ -37,20 +33,14 @@ export class App {
     const bounds = this.clampBounds(dataset.yearExtent());
     const range = this.clampRange(bounds);
     const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
-    const lens = new LensState(
-      DEFAULT_LENS_EFFECT,
-      LENS_WIDTH.default,
-      Math.round((range[0] + range[1]) / 2),
-    );
     const pieLens = new PieLensState();
 
-    this.render(dataset, state, lens, pieLens, bounds);
+    this.render(dataset, state, pieLens, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
-    lens: LensState,
     pieLens: PieLensState,
     bounds: YearRange,
   ): void {
@@ -64,9 +54,8 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds);
-    const lensPanel = new LensPanel(sidebar, lens);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
-    const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
+    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC);
     const sankey = new SankeyChart(main, dataset);
     const pie = new PieChart(main, dataset);
     const pieManager = new PieLensManager({
@@ -86,7 +75,6 @@ export class App {
       charts.node().style.display = isByCountry ? '' : 'none';
       sankey.node().style.display = isGlobalSankey ? '' : 'none';
       pie.node().style.display = isGlobalPie ? '' : 'none';
-      lensPanel.root.style.display = isByCountry ? '' : 'none';
       sankeyLensPanel.root.style.display = isGlobalSankey ? '' : 'none';
       pieLensPanel.root.style.display = isGlobalPie ? '' : 'none';
 
@@ -103,9 +91,6 @@ export class App {
     };
 
     state.subscribe(syncView);
-    lens.subscribe(() => {
-      if (state.activeTab() === 'by-country') charts.update();
-    });
     window.addEventListener('resize', syncView);
     syncView();
   }
