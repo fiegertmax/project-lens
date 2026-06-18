@@ -1,2 +1,165 @@
-/** Forward-compat stub; Phase 4 fills in lens placement and stage logic. */
-export class CountryLensState {}
+import { LENS_STAGE_WIDTH } from '../config';
+
+export type LensStage = 1 | 2 | 3;
+
+export interface PlacedLens {
+  readonly id: string;
+  stage: LensStage;
+  startYear: number;
+  endYear: number;
+  /** True when lens was placed while Shift was held — consumed by LensSync. */
+  linked: boolean;
+}
+
+type Listener = () => void;
+
+// Module-private counter for stable unique ids; no crypto needed (ids are internal map keys only).
+let _nextId = 0;
+
+function makeId(): string {
+  return `lens-${_nextId++}`;
+}
+
+/** Manages per-country placed lenses with non-overlap enforcement and progressive stage gating. */
+export class CountryLensState {
+  private readonly byCountry = new Map<string, PlacedLens[]>();
+  private readonly listeners = new Set<Listener>();
+
+  // --- observer ---
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(): void {
+    for (const l of this.listeners) l();
+  }
+
+  // --- reads ---
+
+  /** Returns a shallow copy so callers cannot mutate the internal array. */
+  lensesFor(country: string): PlacedLens[] {
+    return [...(this.byCountry.get(country) ?? [])];
+  }
+
+  /** Flattened view used by availableStages() and LensSync. */
+  allLenses(): { country: string; lens: PlacedLens }[] {
+    const result: { country: string; lens: PlacedLens }[] = [];
+    for (const [country, lenses] of this.byCountry) {
+      for (const lens of lenses) result.push({ country, lens });
+    }
+    return result;
+  }
+
+  /**
+   * Stage gating (LENS-03): always returns [1]; adds 2 once any stage-1 lens exists;
+   * adds 3 once any stage-2 lens exists (stage 2 must be present before 3 becomes available).
+   */
+  availableStages(): LensStage[] {
+    const all = this.allLenses();
+    const stages: LensStage[] = [1];
+    if (all.some(({ lens }) => lens.stage === 1)) stages.push(2);
+    if (all.some(({ lens }) => lens.stage === 2)) stages.push(3);
+    return stages;
+  }
+
+  // --- mutations ---
+
+  /**
+   * Places a new lens on the given country. Returns the created lens, or null if the
+   * proposed window overlaps an existing lens on the same country (LENS-04).
+   */
+  placeLens(
+    country: string,
+    input: { stage: LensStage; startYear: number; endYear: number; linked?: boolean },
+  ): PlacedLens | null {
+    const span = Math.min(
+      LENS_STAGE_WIDTH.max,
+      Math.max(LENS_STAGE_WIDTH.min, input.endYear - input.startYear),
+    );
+    const candidate: PlacedLens = {
+      id: makeId(),
+      stage: input.stage,
+      startYear: input.startYear,
+      endYear: input.startYear + span,
+      linked: input.linked ?? false,
+    };
+
+    const existing = this.byCountry.get(country) ?? [];
+    if (existing.some(l => this.overlaps(candidate, l))) return null;
+
+    const updated = [...existing, candidate].sort((a, b) => a.startYear - b.startYear);
+    this.byCountry.set(country, updated);
+    this.notify();
+    return candidate;
+  }
+
+  /**
+   * Shifts the lens by deltaYears. Rejected without notify if the shifted window
+   * would overlap another lens on the same country.
+   */
+  moveLens(country: string, id: string, deltaYears: number): boolean {
+    const lenses = this.byCountry.get(country);
+    if (!lenses) return false;
+    const idx = lenses.findIndex(l => l.id === id);
+    if (idx === -1) return false;
+
+    const lens = lenses[idx];
+    const moved: PlacedLens = {
+      ...lens,
+      startYear: lens.startYear + deltaYears,
+      endYear: lens.endYear + deltaYears,
+    };
+    const others = lenses.filter(l => l.id !== id);
+    if (others.some(l => this.overlaps(moved, l))) return false;
+
+    lenses[idx] = moved;
+    this.byCountry.set(country, [...lenses].sort((a, b) => a.startYear - b.startYear));
+    this.notify();
+    return true;
+  }
+
+  /**
+   * Resizes a lens by setting endYear = startYear + clamp(newSpan, min, max).
+   * Anchor: startYear is kept fixed; only endYear changes.
+   * Rejected without notify if the resized window would overlap another lens.
+   */
+  resizeLens(country: string, id: string, newSpan: number): boolean {
+    const lenses = this.byCountry.get(country);
+    if (!lenses) return false;
+    const idx = lenses.findIndex(l => l.id === id);
+    if (idx === -1) return false;
+
+    const lens = lenses[idx];
+    const clamped = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, newSpan));
+    const resized: PlacedLens = { ...lens, endYear: lens.startYear + clamped };
+    const others = lenses.filter(l => l.id !== id);
+    if (others.some(l => this.overlaps(resized, l))) return false;
+
+    lenses[idx] = resized;
+    this.byCountry.set(country, [...lenses].sort((a, b) => a.startYear - b.startYear));
+    this.notify();
+    return true;
+  }
+
+  /** Removes a lens by id and fires notify. */
+  removeLens(country: string, id: string): void {
+    const lenses = this.byCountry.get(country);
+    if (!lenses) return;
+    const filtered = lenses.filter(l => l.id !== id);
+    if (filtered.length === lenses.length) return; // nothing removed, skip notify
+    this.byCountry.set(country, filtered);
+    this.notify();
+  }
+
+  // --- helpers ---
+
+  /**
+   * Strict overlap: shared boundaries (a.endYear === b.startYear) are NOT overlapping
+   * so adjacent slope-chart segments can share a boundary year (SLOPE-05).
+   */
+  private overlaps(a: PlacedLens, b: PlacedLens): boolean {
+    return a.startYear < b.endYear && b.startYear < a.endYear;
+  }
+}
