@@ -12,6 +12,14 @@
   --lens-fill: rgba(13, 148, 136, 0.16);
   --lens-border: rgba(13, 148, 136, 0.55);
 
+  /* Stage colors — single source of truth mirroring config STAGE_COLORS (LENS-02) */
+  --stage-1-color: #2e9e5b;
+  --stage-2-color: #e08a2e;
+  --stage-3-color: #3b73c8;
+  --stage-1-fill: rgba(46, 158, 91, 0.16);
+  --stage-2-fill: rgba(224, 138, 46, 0.16);
+  --stage-3-fill: rgba(59, 115, 200, 0.16);
+
   font: 15px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -1217,4 +1225,65 @@ body.line-dragging {
 .slope-chart__scale-title {
   fill: var(--text-muted);
   font-size: 10px;
+}
+
+/* Phase 4: staged lens icons + placed lens bands */
+
+/* Sidebar drag handle for a staged lens — mirrors .lens-panel__lens-icon sizing */
+.lens-stage-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.lens-stage-icon:hover {
+  opacity: 0.85;
+}
+
+.lens-stage-icon:active {
+  cursor: grabbing;
+}
+
+.lens-stage-icon--stage-1 {
+  color: var(--stage-1-color);
+  border-color: var(--stage-1-color);
+}
+
+.lens-stage-icon--stage-2 {
+  color: var(--stage-2-color);
+  border-color: var(--stage-2-color);
+}
+
+.lens-stage-icon--stage-3 {
+  color: var(--stage-3-color);
+  border-color: var(--stage-3-color);
+}
+
+/* Hidden stages disappear entirely — never greyed/disabled (Success Criterion 2) */
+.lens-stage-icon--hidden {
+  display: none;
+}
+
+/* Draggable band on the line chart — fill/stroke set inline by JS per stage */
+.placed-lens__rect {
+  cursor: grab;
+  stroke-width: 1;
+}
+
+.placed-lens__rect:active {
+  cursor: grabbing;
+}
+
+.placed-lens__label {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
