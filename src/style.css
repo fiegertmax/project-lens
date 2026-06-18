@@ -1044,3 +1044,94 @@ body.pie-lens-dragging {
   font-size: 13px;
   cursor: pointer;
 }
+
+/* Phase 2: chart area drag-to-extract */
+
+/* Scrollable column that holds combined chart, extracted rows, and spacer */
+.chart-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Wrapper for each chart row — drop ring applied via --drop modifier */
+.chart-area__row {
+  position: relative;
+}
+
+/* Always-present empty drop zone below all chart rows */
+.chart-area__drop-spacer {
+  min-height: 64px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+/* Drop-target highlight on a chart row */
+.chart-area__row--drop,
+.combined-chart.chart-area__row--drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Empty-zone highlight on the spacer */
+.chart-area__drop-spacer--drop {
+  background: var(--accent-soft);
+}
+
+/* Floating pill ghost — follows cursor during line drag */
+.line-ghost {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  /* color is set inline to the country's line color */
+}
+
+/* Grabbing cursor on body during active line drag */
+body.line-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Grab cursor on transparent hit overlay paths */
+.combined-chart .combined-line-hit,
+.single-country-chart .single-line-hit {
+  cursor: grab;
+}
+
+/* Source line dims during active drag */
+.combined-chart__line--dragging,
+.single-line--dragging {
+  opacity: 0.2;
+}
+
+/* Container for an extracted single-country row */
+.single-country-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Country name label above the SVG */
+.single-country-chart__label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+/* SVG fills its container width */
+.single-country-chart__svg {
+  width: 100%;
+}
