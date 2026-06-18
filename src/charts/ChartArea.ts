@@ -1,12 +1,39 @@
+import { scaleOrdinal, schemeTableau10 } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
 import { CombinedChart } from './CombinedChart';
+import type { LineDragCallbacks } from './drag-types';
+import { SingleCountryChart } from './SingleCountryChart';
 
-/** Thin container that holds one CombinedChart; Phase 2 extends this with extracted-country logic. */
+type DropTarget =
+  | { kind: 'new-row' }
+  | { kind: 'combined' }
+  | { kind: 'single-row'; country: string }
+  | { kind: 'invalid' };
+
+/** Orchestrates the combined chart and extracted single-country rows. */
 export class ChartArea {
   private readonly div: HTMLDivElement;
-  private readonly chart: CombinedChart;
+  private readonly rowContainer: HTMLDivElement;
+  private readonly combinedChart: CombinedChart;
+  private readonly dropSpacer: HTMLDivElement;
+  private readonly dataset: EmissionsDataset;
+  private readonly state: AppState;
+  private readonly metric: MetricDefinition;
+  private readonly unsub: () => void;
+
+  // Extraction state — never written to AppState (D-14)
+  private extractedCountries: string[] = [];
+  private readonly rows = new Map<string, SingleCountryChart>();
+
+  // Shared color scale; rebuilt over full selection on every reconcile
+  private colorFor!: (c: string) => string;
+
+  // Ghost drag state
+  private ghost: HTMLDivElement | null = null;
+  private prevDropEl: HTMLElement | null = null;
+  private readonly onEscape: (e: KeyboardEvent) => void;
 
   constructor(
     parent: HTMLElement,
@@ -14,10 +41,32 @@ export class ChartArea {
     state: AppState,
     metric: MetricDefinition,
   ) {
+    this.dataset = dataset;
+    this.state = state;
+    this.metric = metric;
+
     this.div = document.createElement('div');
     this.div.className = 'chart-area';
     parent.appendChild(this.div);
-    this.chart = new CombinedChart(this.div, dataset, state, metric);
+
+    this.rowContainer = document.createElement('div');
+    this.rowContainer.className = 'chart-area__rows';
+    this.div.appendChild(this.rowContainer);
+
+    this.combinedChart = new CombinedChart(this.rowContainer, dataset, state, metric);
+    // Combined chart root participates in drop detection as a chart-area__row
+    this.combinedChart.node().classList.add('chart-area__row');
+
+    this.dropSpacer = document.createElement('div');
+    this.dropSpacer.className = 'chart-area__drop-spacer';
+    this.div.appendChild(this.dropSpacer);
+
+    this.onEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') this.cancelDrag();
+    };
+
+    this.unsub = state.subscribe(() => this.reconcile());
+    this.reconcile();
   }
 
   /** Root element used by app.ts to toggle visibility. */
@@ -26,10 +75,249 @@ export class ChartArea {
   }
 
   update(): void {
-    this.chart.update();
+    this.reconcile();
   }
 
   destroy(): void {
-    this.chart.destroy();
+    this.unsub();
+    this.combinedChart.destroy();
+    for (const chart of this.rows.values()) chart.destroy();
+    this.rows.clear();
+    this.div.remove();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Color scale
+  // ---------------------------------------------------------------------------
+
+  private buildColorFor(selectedCountries: string[]): (c: string) => string {
+    const scale = scaleOrdinal(selectedCountries, schemeTableau10 as readonly string[]);
+    return (c: string) => scale(c);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reconcile loop
+  // ---------------------------------------------------------------------------
+
+  private reconcile(): void {
+    const selected = this.state.selectedCountries();
+    const selectedSet = new Set(selected);
+
+    // (1) Purge extracted countries no longer in selection
+    this.extractedCountries = this.extractedCountries.filter((c) => selectedSet.has(c));
+
+    // (2) Destroy rows for countries removed from selection
+    for (const [country, chart] of this.rows) {
+      if (!selectedSet.has(country)) {
+        chart.destroy();
+        this.rows.delete(country);
+      }
+    }
+
+    // (3) Rebuild shared color over full selection
+    this.colorFor = this.buildColorFor(selected);
+    this.combinedChart.colorFor = this.colorFor;
+
+    // (4) Build the drag callbacks object to wire into each chart
+    const callbacks = this.buildCallbacks();
+
+    // Wire callbacks into combined chart
+    this.combinedChart.callbacks = callbacks;
+
+    // (5) Create rows for newly extracted countries
+    for (const country of this.extractedCountries) {
+      if (!this.rows.has(country)) {
+        const chart = new SingleCountryChart(
+          this.rowContainer,
+          country,
+          this.dataset,
+          this.metric,
+          this.colorFor,
+        );
+        chart.callbacks = callbacks;
+        this.rows.set(country, chart);
+      }
+    }
+
+    // (6) Re-append rows in extraction order; keep drop spacer last
+    for (const country of this.extractedCountries) {
+      const chart = this.rows.get(country);
+      if (chart) this.rowContainer.appendChild(chart.node());
+    }
+    // dropSpacer is appended to this.div (below rowContainer), already in correct position
+
+    // (7) Drive combined chart country list
+    const combinedCountries = selected.filter((c) => !this.extractedCountries.includes(c));
+    this.combinedChart.updateCountries(combinedCountries);
+
+    // Update year range on all rows
+    const yearRange = this.state.yearRange();
+    for (const chart of this.rows.values()) chart.update(yearRange);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drag callbacks factory
+  // ---------------------------------------------------------------------------
+
+  private buildCallbacks(): LineDragCallbacks {
+    return {
+      onDragStart: (country, x, y) => this.handleDragStart(country, x, y),
+      onDragMove: (country, x, y) => this.handleDragMove(country, x, y),
+      onDragEnd: (country, x, y) => this.handleDragEnd(country, x, y),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ghost badge lifecycle (adapted from lens-drag-sweeper.ts)
+  // ---------------------------------------------------------------------------
+
+  private handleDragStart(country: string, x: number, y: number): void {
+    // Create ghost pill badge — textContent only (T-02-01 XSS)
+    this.ghost = document.createElement('div');
+    this.ghost.className = 'line-ghost';
+    this.ghost.textContent = country;
+    this.ghost.style.color = this.colorFor(country);
+    document.body.appendChild(this.ghost);
+    document.body.classList.add('line-dragging');
+    this.positionGhost(x, y);
+
+    document.addEventListener('keydown', this.onEscape);
+  }
+
+  private handleDragMove(_country: string, x: number, y: number): void {
+    this.positionGhost(x, y);
+    this.highlightDropTarget(x, y);
+  }
+
+  private handleDragEnd(country: string, x: number, y: number): void {
+    const target = this.dropTargetAt(x, y);
+    this.applyDropOutcome(country, target);
+    this.cleanupDrag();
+  }
+
+  private cancelDrag(): void {
+    // Escape: clean up without any state mutation (no state change, no reconcile)
+    this.cleanupDrag();
+  }
+
+  private cleanupDrag(): void {
+    if (this.ghost) {
+      this.ghost.remove();
+      this.ghost = null;
+    }
+    document.body.classList.remove('line-dragging');
+    this.clearDropHighlight();
+    document.removeEventListener('keydown', this.onEscape);
+    this.prevDropEl = null;
+  }
+
+  private positionGhost(x: number, y: number): void {
+    if (!this.ghost) return;
+    this.ghost.style.left = `${x + 12}px`;
+    this.ghost.style.top = `${y + 12}px`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drop target detection (elementFromPoint + closest)
+  // ---------------------------------------------------------------------------
+
+  private dropTargetAt(x: number, y: number): DropTarget {
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return { kind: 'invalid' };
+
+    // Check combined first — combined root has both .combined-chart and .chart-area__row
+    const combined = el.closest<HTMLElement>('.combined-chart');
+    if (combined) return { kind: 'combined' };
+
+    // Check spacer
+    const spacer = el.closest<HTMLElement>('.chart-area__drop-spacer');
+    if (spacer) return { kind: 'new-row' };
+
+    // Check single-country row (has data-country attribute)
+    const row = el.closest<HTMLElement>('.chart-area__row');
+    if (row && row.dataset.country) {
+      return { kind: 'single-row', country: row.dataset.country };
+    }
+
+    return { kind: 'invalid' };
+  }
+
+  private highlightDropTarget(x: number, y: number): void {
+    this.clearDropHighlight();
+    const el = document.elementFromPoint(x, y) as HTMLElement | null;
+    if (!el) return;
+
+    const combined = el.closest<HTMLElement>('.combined-chart');
+    if (combined) {
+      combined.classList.add('chart-area__row--drop');
+      this.prevDropEl = combined;
+      return;
+    }
+
+    const spacer = el.closest<HTMLElement>('.chart-area__drop-spacer');
+    if (spacer) {
+      spacer.classList.add('chart-area__drop-spacer--drop');
+      this.prevDropEl = spacer;
+      return;
+    }
+
+    const row = el.closest<HTMLElement>('.chart-area__row');
+    if (row && row.dataset.country) {
+      row.classList.add('chart-area__row--drop');
+      this.prevDropEl = row;
+    }
+  }
+
+  private clearDropHighlight(): void {
+    if (this.prevDropEl) {
+      this.prevDropEl.classList.remove('chart-area__row--drop', 'chart-area__drop-spacer--drop');
+      this.prevDropEl = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drop outcomes
+  // ---------------------------------------------------------------------------
+
+  private applyDropOutcome(country: string, target: DropTarget): void {
+    switch (target.kind) {
+      case 'new-row': {
+        // DRAG-01: drag to spacer → extract into own row
+        if (!this.extractedCountries.includes(country)) {
+          this.extractedCountries.push(country);
+          this.reconcile();
+        }
+        break;
+      }
+      case 'combined': {
+        // D-12: return to combined chart
+        const idx = this.extractedCountries.indexOf(country);
+        if (idx !== -1) {
+          this.extractedCountries.splice(idx, 1);
+          this.reconcile();
+        }
+        break;
+      }
+      case 'single-row': {
+        // DRAG-02: move to extracted (as its own row), reorder adjacent to target
+        if (target.country === country) break; // drop on own row — no-op
+        if (!this.extractedCountries.includes(country)) {
+          this.extractedCountries.push(country);
+        }
+        // Reorder: place country adjacent to target
+        const targetIdx = this.extractedCountries.indexOf(target.country);
+        const dragIdx = this.extractedCountries.indexOf(country);
+        if (targetIdx !== -1 && dragIdx !== -1 && dragIdx !== targetIdx) {
+          this.extractedCountries.splice(dragIdx, 1);
+          const newTargetIdx = this.extractedCountries.indexOf(target.country);
+          this.extractedCountries.splice(newTargetIdx + 1, 0, country);
+        }
+        this.reconcile();
+        break;
+      }
+      case 'invalid':
+        // No state change on invalid drop
+        break;
+    }
   }
 }
