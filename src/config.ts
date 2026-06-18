@@ -98,3 +98,13 @@ export const CO2_SOURCES = [
 export const LENS_WIDTH = { min: 3, max: 40, default: 10 };
 
 export const DEFAULT_LENS_EFFECT: LensEffectKey = 'growth-abs';
+
+// Single source of truth for lens stage colors — sidebar panel and slope lines both read from here (LENS-02).
+export const STAGE_COLORS: Record<1 | 2 | 3, string> = {
+  1: '#2e9e5b',
+  2: '#e08a2e',
+  3: '#3b73c8',
+} as const;
+
+// Phase-4 name for lens year-span bounds; mirrors LENS_WIDTH values so behaviour is unchanged until Plan 05 removes LENS_WIDTH.
+export const LENS_STAGE_WIDTH = { min: 3, max: 40, default: 10 } as const;
