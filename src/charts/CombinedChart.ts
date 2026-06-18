@@ -156,7 +156,7 @@ export class CombinedChart {
 
     this.group('lines')
       .selectAll<SVGPathElement, SeriesEntry>('path.combined-line')
-      .data(entries, (d) => d.country)
+      .data(entries.filter(Boolean), (d) => d?.country ?? '')
       .join(
         (enter) =>
           enter
@@ -192,7 +192,7 @@ export class CombinedChart {
     const self = this;
     this.group('drag-overlays')
       .selectAll<SVGPathElement, SeriesEntry>('path.combined-line-hit')
-      .data(entries, (d) => d.country)
+      .data(entries.filter(Boolean), (d) => d?.country ?? '')
       .join(
         (enter) =>
           enter

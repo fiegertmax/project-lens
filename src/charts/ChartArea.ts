@@ -106,9 +106,10 @@ export class ChartArea {
     // (1) Purge extracted countries no longer in selection
     this.extractedCountries = this.extractedCountries.filter((c) => selectedSet.has(c));
 
-    // (2) Destroy rows for countries removed from selection
+    // (2) Destroy rows for countries removed from selection OR moved back to combined
+    const extractedSet = new Set(this.extractedCountries);
     for (const [country, chart] of this.rows) {
-      if (!selectedSet.has(country)) {
+      if (!selectedSet.has(country) || !extractedSet.has(country)) {
         chart.destroy();
         this.rows.delete(country);
       }
@@ -146,13 +147,13 @@ export class ChartArea {
     }
     // dropSpacer is appended to this.div (below rowContainer), already in correct position
 
-    // (7) Drive combined chart country list
-    const combinedCountries = selected.filter((c) => !this.extractedCountries.includes(c));
-    this.combinedChart.updateCountries(combinedCountries);
-
-    // Update year range on all rows
+    // (7) Update year range on all single-country rows
     const yearRange = this.state.yearRange();
     for (const chart of this.rows.values()) chart.update(yearRange);
+
+    // (8) Drive combined chart country list (after rows are updated so extraction is visible)
+    const combinedCountries = selected.filter((c) => !this.extractedCountries.includes(c));
+    this.combinedChart.updateCountries(combinedCountries);
   }
 
   // ---------------------------------------------------------------------------
@@ -223,21 +224,20 @@ export class ChartArea {
 
   private dropTargetAt(x: number, y: number): DropTarget {
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
-    if (!el) return { kind: 'invalid' };
+    if (!el) return { kind: 'new-row' };
 
     // Check combined first — combined root has both .combined-chart and .chart-area__row
     const combined = el.closest<HTMLElement>('.combined-chart');
     if (combined) return { kind: 'combined' };
-
-    // Check spacer
-    const spacer = el.closest<HTMLElement>('.chart-area__drop-spacer');
-    if (spacer) return { kind: 'new-row' };
 
     // Check single-country row (has data-country attribute)
     const row = el.closest<HTMLElement>('.chart-area__row');
     if (row && row.dataset.country) {
       return { kind: 'single-row', country: row.dataset.country };
     }
+
+    // Spacer, gap between rows, or anywhere else within the chart area → extract as new row
+    if (el.closest<HTMLElement>('.chart-area')) return { kind: 'new-row' };
 
     return { kind: 'invalid' };
   }
@@ -254,17 +254,17 @@ export class ChartArea {
       return;
     }
 
-    const spacer = el.closest<HTMLElement>('.chart-area__drop-spacer');
-    if (spacer) {
-      spacer.classList.add('chart-area__drop-spacer--drop');
-      this.prevDropEl = spacer;
-      return;
-    }
-
     const row = el.closest<HTMLElement>('.chart-area__row');
     if (row && row.dataset.country) {
       row.classList.add('chart-area__row--drop');
       this.prevDropEl = row;
+      return;
+    }
+
+    // Hovering over spacer, gap, or anywhere else within the chart area → highlight spacer
+    if (el.closest<HTMLElement>('.chart-area')) {
+      this.dropSpacer.classList.add('chart-area__drop-spacer--drop');
+      this.prevDropEl = this.dropSpacer;
     }
   }
 
