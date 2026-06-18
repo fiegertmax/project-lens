@@ -1184,6 +1184,29 @@ body.line-dragging {
   font-size: 11px;
 }
 
+/* Per-row stub-lens toggle — replaced by real lens drag in Phase 4 */
+.single-country-chart__lens-toggle {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.single-country-chart__lens-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.single-country-chart--lens-active .single-country-chart__lens-toggle {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
 /* Boundary-year tick labels on the x-axis */
 .slope-chart__column-label {
   font-size: 11px;
