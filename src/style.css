@@ -500,11 +500,22 @@ body {
 }
 
 /* Lens: active band + derived line (emphasized, distinct saturated colour) */
-.lens-band {
+.lens-band__rect {
   fill: var(--lens-fill);
   stroke: var(--lens-border);
   stroke-width: 1;
-  cursor: ew-resize;
+  cursor: grab;
+}
+
+.lens-band__rect:active {
+  cursor: grabbing;
+}
+
+.lens-band__label {
+  fill: var(--lens);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 .lens-line {
@@ -678,7 +689,7 @@ body.lens-dragging {
   user-select: none;
 }
 
-.line-chart--drop {
+.single-country-chart--drop {
   outline: 2px dashed var(--lens-border);
   outline-offset: 3px;
   border-radius: 6px;
@@ -1145,9 +1156,9 @@ body.line-dragging {
   width: 100%;
 }
 
-/* Line chart fills full body width when no lens is active (SLOPE-01 default) */
+/* Line chart fills remaining body width (grows to fill after slope panel + gap) */
 .single-country-chart__line {
-  flex: 1 1 100%;
+  flex: 1 1 0;
   min-width: 0; /* allows SVG to shrink inside flex */
 }
 
@@ -1156,11 +1167,6 @@ body.line-dragging {
   flex: 0 0 33.333%;
   min-width: 0;
   display: none;
-}
-
-/* Lens-active modifier: shrink line chart to 2/3 (SLOPE-01) */
-.single-country-chart--lens-active .single-country-chart__line {
-  flex-basis: 66.666%;
 }
 
 /* Lens-active modifier: reveal the slope panel (SLOPE-01) */
@@ -1173,48 +1179,42 @@ body.line-dragging {
   width: 100%;
 }
 
-/* Slope lines; per-source stroke color is set inline (mirrors .line-ghost pattern) */
-.slope-chart__line {
-  fill: none;
-  stroke-width: 2;
+/* Parallel axis vertical lines */
+.slope-chart__axis-line {
+  stroke: var(--border);
+  stroke-width: 1.5;
 }
 
-/* Value labels beside the slope endpoints; fill set inline to match source color */
-.slope-chart__label {
+/* Boundary-year labels below each vertical axis */
+.slope-chart__year-label {
   font-size: 11px;
-}
-
-/* Per-row stub-lens toggle — replaced by real lens drag in Phase 4 */
-.single-country-chart__lens-toggle {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.single-country-chart__lens-toggle:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.single-country-chart--lens-active .single-country-chart__lens-toggle {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg);
-}
-
-/* Boundary-year tick labels on the x-axis */
-.slope-chart__column-label {
-  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   fill: var(--text-muted);
 }
 
-/* Axis/grid chrome matches muted chart border color */
-.slope-chart__axis path,
-.slope-chart__axis line {
+/* Connector lines between the two axes; stroke color set inline per source */
+.slope-chart__source-line {
+  fill: none;
+}
+
+/* Source name labels beside the right axis */
+.slope-chart__label {
+  font-size: 10px;
+}
+
+/* Floating value scale chrome */
+.slope-chart .y-scale path,
+.slope-chart .y-scale line {
   stroke: var(--border);
+}
+
+.slope-chart .y-scale text {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Rotated unit label beside the floating scale */
+.slope-chart__scale-title {
+  fill: var(--text-muted);
+  font-size: 10px;
 }

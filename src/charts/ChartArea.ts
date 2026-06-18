@@ -2,6 +2,7 @@ import { scaleOrdinal, schemeTableau10 } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
+import type { LensState } from '../state/LensState';
 import { CombinedChart } from './CombinedChart';
 import type { LineDragCallbacks } from './drag-types';
 import { SingleCountryChart } from './SingleCountryChart';
@@ -23,6 +24,8 @@ export class ChartArea {
   private readonly metric: MetricDefinition;
   private readonly unsub: () => void;
 
+  private readonly lensState: LensState | null;
+
   // Extraction state — never written to AppState (D-14)
   private extractedCountries: string[] = [];
   private readonly rows = new Map<string, SingleCountryChart>();
@@ -40,10 +43,12 @@ export class ChartArea {
     dataset: EmissionsDataset,
     state: AppState,
     metric: MetricDefinition,
+    lensState: LensState | null = null,
   ) {
     this.dataset = dataset;
     this.state = state;
     this.metric = metric;
+    this.lensState = lensState;
 
     this.div = document.createElement('div');
     this.div.className = 'chart-area';
@@ -60,6 +65,18 @@ export class ChartArea {
     this.dropSpacer = document.createElement('div');
     this.dropSpacer.className = 'chart-area__drop-spacer';
     this.div.appendChild(this.dropSpacer);
+
+    // Ctrl/Cmd + scroll (or trackpad pinch) resizes the lens width;
+    // SingleCountryChart's LensState subscription handles the re-render.
+    if (this.lensState) {
+      const lens = this.lensState;
+      this.div.addEventListener('wheel', (e: WheelEvent) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 1 : -1;
+        lens.setWidth(lens.currentWidth() + delta);
+      }, { passive: false });
+    }
 
     this.onEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') this.cancelDrag();
@@ -136,6 +153,7 @@ export class ChartArea {
           this.colorFor,
         );
         chart.callbacks = callbacks;
+        if (this.lensState) chart.setLens(this.lensState);
         this.rows.set(country, chart);
       }
     }

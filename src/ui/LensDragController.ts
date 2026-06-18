@@ -11,8 +11,8 @@ export class LensDragController {
     createLensDragSweeper<HTMLElement>(handle, {
       resolveTarget: (x, y) => chartAt(x, y),
       onHover: (target, previous) => {
-        previous?.classList.remove('line-chart--drop');
-        target?.classList.add('line-chart--drop');
+        previous?.classList.remove('single-country-chart--drop');
+        target?.classList.add('single-country-chart--drop');
       },
       onDrop: (target, { shift }) => {
         if (!shift) this.lensCountry(target);
@@ -30,8 +30,8 @@ export class LensDragController {
   }
 }
 
-/** The chart element under a viewport point, or null. Ghost is click-through. */
+/** The single-country chart element under a viewport point, or null. Ghost is click-through. */
 function chartAt(x: number, y: number): HTMLElement | null {
   const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  return el?.closest<HTMLElement>('.line-chart') ?? null;
+  return el?.closest<HTMLElement>('.single-country-chart[data-country]') ?? null;
 }

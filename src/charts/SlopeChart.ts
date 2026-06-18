@@ -1,41 +1,34 @@
-import { axisBottom, axisLeft, format, line, scaleBand, scaleLinear, select } from 'd3';
-import type { ScaleBand, ScaleLinear, Selection } from 'd3';
+import { axisRight, format, scaleLinear, select } from 'd3';
+import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { getSourceValue } from '../utils/getSourceValue';
-import { boundaryYears, EMISSION_SOURCES } from './slope-types';
+import { EMISSION_SOURCES } from './slope-types';
 import type { LensWindow } from './slope-types';
 
-const MARGIN = { top: 12, right: 110, bottom: 28, left: 72 };
-const HEIGHT = 300;
-const YEAR_FORMAT = format('d');
+// Matches the line chart height; right margin reserves space for source labels + scale
+const MARGIN = { top: 20, right: 110, bottom: 28, left: 10 };
+const HEIGHT = 360;
+// x offset (from right parallel axis) where the floating value scale begins
+const SCALE_X = 65;
 const MIN_LABEL_GAP = 12;
+const YEAR_FORMAT = format('d');
 
-type BandScale = ScaleBand<number>;
 type LinearScale = ScaleLinear<number, number>;
-// SvgGroup: the top-level translated plot group (parent is null = document root via select())
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
-// PlotLayer: child groups inside the plot (parent is SVGGElement)
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
-
-interface Point {
-  i: number;
-  year: number;
-  value: number | undefined;
-}
 
 interface SourceEntry {
   key: string;
   label: string;
   color: string;
-  points: Point[];
+  leftValue: number | undefined;
+  rightValue: number | undefined;
 }
 
-
 /**
- * Renders a slope chart for one country across a list of lens windows.
- * One colored line per emission source; scaleBand x-axis; single shared y-axis;
- * .defined() guard for broken lines at missing data (SLOPE-04);
- * consecutive lenses share boundary columns (SLOPE-05).
+ * Parallel-coordinates panel for one lensed country.
+ * Two vertical axis lines (one per lens boundary year) with colored source
+ * lines connecting them, plus a decoupled value scale on the right.
  */
 export class SlopeChart {
   private readonly dataset: EmissionsDataset;
@@ -61,12 +54,10 @@ export class SlopeChart {
     this.root.remove();
   }
 
-  /** Removes all rendered slope content (lines, axes, labels). */
   clear(): void {
-    this.group('lines').selectAll('*').remove();
-    this.group('labels').selectAll('*').remove();
-    this.group('x-axis').selectAll('*').remove();
-    this.group('y-axis').selectAll('*').remove();
+    ['axes', 'lines', 'labels', 'y-scale'].forEach((name) =>
+      this.group(name).selectAll('*').remove(),
+    );
   }
 
   render(country: string, lenses: LensWindow[]): void {
@@ -75,95 +66,120 @@ export class SlopeChart {
       return;
     }
 
-    const width = this.root.node()!.clientWidth || 600;
+    const width = this.root.node()!.clientWidth || 300;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
 
     this.svg.attr('width', width).attr('height', HEIGHT);
 
-    // Build ordered column list — repeated shared boundaries for SLOPE-05
-    const columns = boundaryYears(lenses);
+    const { startYear, endYear } = lenses[0];
 
-    // Band scale indexed by column position (not year value) so repeated years get distinct slots
-    const x: BandScale = scaleBand<number>()
-      .domain(columns.map((_, i) => i))
-      .range([0, innerW])
-      .padding(0);
-
-    // Center each point on its band
-    const cx = (i: number): number => x(i)! + x.bandwidth() / 2;
-
-    // Build per-source point arrays
     const sources: SourceEntry[] = EMISSION_SOURCES.map((src) => ({
-      ...src,
-      points: columns.map((year, i) => ({
-        i,
-        year,
-        value: getSourceValue(this.dataset, country, src.key, year),
-      })),
+      key: src.key,
+      label: src.label,
+      color: src.color,
+      leftValue: getSourceValue(this.dataset, country, src.key, startYear),
+      rightValue: getSourceValue(this.dataset, country, src.key, endYear),
     }));
 
-    // Shared y domain across all finite values from all sources
     const allValues = sources.flatMap((s) =>
-      s.points.map((p) => p.value).filter((v): v is number => v !== undefined),
+      [s.leftValue, s.rightValue].filter((v): v is number => v !== undefined),
     );
     const yMin = allValues.length ? Math.min(0, Math.min(...allValues)) : 0;
     const yMax = allValues.length ? Math.max(...allValues) || 1 : 1;
     const y: LinearScale = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
-    this.renderAxes(x, y, columns, innerH);
-    this.renderLines(sources, cx, y);
+    this.renderAxes(innerW, innerH, startYear, endYear);
+    this.renderLines(sources, y, innerW, innerH);
     this.renderLabels(sources, y, innerW);
+    this.renderScale(y, innerW, innerH);
   }
 
-  private renderAxes(x: BandScale, y: LinearScale, columns: number[], innerH: number): void {
-    // Bottom axis: one tick per column position, labeled with the boundary year
-    const xAxis = axisBottom(x).tickFormat((i) => YEAR_FORMAT(columns[i as number]));
-    this.group('x-axis')
-      .attr('class', 'x-axis slope-chart__axis')
-      .attr('transform', `translate(0,${innerH})`)
-      .call(xAxis)
-      .selectAll<SVGTextElement, unknown>('.tick text')
-      .attr('class', 'slope-chart__column-label');
+  /** Two vertical axis lines with boundary-year labels at the bottom. */
+  private renderAxes(innerW: number, innerH: number, startYear: number, endYear: number): void {
+    const g = this.group('axes');
 
-    // Left axis: shared linear scale for all sources
-    this.group('y-axis')
-      .attr('class', 'y-axis slope-chart__axis')
-      .call(axisLeft(y).ticks(5));
+    g.selectAll<SVGLineElement, [number, number]>('line.slope-chart__axis-line')
+      .data([[0, 0], [innerW, innerW]] as [number, number][])
+      .join('line')
+      .attr('class', 'slope-chart__axis-line')
+      .attr('x1', (d) => d[0])
+      .attr('y1', 0)
+      .attr('x2', (d) => d[1])
+      .attr('y2', innerH);
+
+    g.selectAll<SVGTextElement, [number, number]>('text.slope-chart__year-label')
+      .data([[0, startYear], [innerW, endYear]] as [number, number][])
+      .join('text')
+      .attr('class', 'slope-chart__year-label')
+      .attr('x', (d) => d[0])
+      .attr('y', innerH + 16)
+      .attr('text-anchor', 'middle')
+      .text((d) => YEAR_FORMAT(d[1]));
   }
 
+  /** Colored lines (and endpoint dots) connecting left-axis value to right-axis value. */
   private renderLines(
     sources: SourceEntry[],
-    cx: (i: number) => number,
     y: LinearScale,
+    innerW: number,
+    innerH: number,
   ): void {
-    const lineGen = line<Point>()
-      .defined((p) => p.value !== undefined)
-      .x((p) => cx(p.i))
-      .y((p) => y(p.value!));
+    const g = this.group('lines');
+    const drawable = sources.filter(
+      (s) => s.leftValue !== undefined && s.rightValue !== undefined,
+    );
 
-    this.group('lines')
-      .selectAll<SVGPathElement, SourceEntry>('path.slope-chart__line')
-      .data(sources, (d) => d.key)
-      .join('path')
-      .attr('class', 'slope-chart__line')
-      .attr('fill', 'none')
-      .attr('stroke-width', 1.5)
+    g.selectAll<SVGLineElement, SourceEntry>('line.slope-chart__source-line')
+      .data(drawable, (d) => d.key)
+      .join('line')
+      .attr('class', 'slope-chart__source-line')
+      .attr('x1', 0)
+      .attr('y1', (d) => y(d.leftValue!))
+      .attr('x2', innerW)
+      .attr('y2', (d) => y(d.rightValue!))
       .attr('stroke', (d) => d.color)
-      .attr('d', (d) => lineGen(d.points) ?? '');
+      .attr('stroke-width', 2);
+
+    // Small dots at each axis to anchor the lines visually
+    const dots = drawable.flatMap((s) => [
+      { x: 0, cy: y(s.leftValue!), color: s.color, id: s.key + '-L' },
+      { x: innerW, cy: y(s.rightValue!), color: s.color, id: s.key + '-R' },
+    ]);
+
+    g.selectAll<SVGCircleElement, (typeof dots)[number]>('circle.slope-chart__dot')
+      .data(dots, (d) => d.id)
+      .join('circle')
+      .attr('class', 'slope-chart__dot')
+      .attr('cx', (d) => d.x)
+      .attr('cy', (d) => d.cy)
+      .attr('r', 3)
+      .attr('fill', (d) => d.color);
+
+    // "No data" notice when nothing is drawable
+    g.selectAll<SVGTextElement, number>('text.slope-chart__empty')
+      .data(drawable.length === 0 ? [innerH / 2] : [])
+      .join('text')
+      .attr('class', 'slope-chart__empty')
+      .attr('x', innerW / 2)
+      .attr('y', (d) => d)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '11px')
+      .attr('fill', 'var(--text-muted)')
+      .text('No data for lens range');
   }
 
+  /** Source name labels just right of the right parallel axis (bumped vertically). */
   private renderLabels(sources: SourceEntry[], y: LinearScale, innerW: number): void {
-    // Only label sources that have at least one finite right-edge point
     const labeled = sources
-      .map((src) => {
-        const lastDefined = [...src.points].reverse().find((p) => p.value !== undefined);
-        if (!lastDefined) return null;
-        return { key: src.key, label: src.label, color: src.color, naturalY: y(lastDefined.value!) };
-      })
-      .filter((d): d is NonNullable<typeof d> => d !== null);
+      .filter((s) => s.rightValue !== undefined)
+      .map((s) => ({
+        key: s.key,
+        label: this.shortLabel(s.label),
+        color: s.color,
+        naturalY: y(s.rightValue!),
+      }));
 
-    // One-pass label-bump
     const bumped = this.bumpLabels(labeled.map((d) => ({ y: d.naturalY, minGap: MIN_LABEL_GAP })));
 
     this.group('labels')
@@ -171,34 +187,45 @@ export class SlopeChart {
       .data(labeled, (d) => d.key)
       .join('text')
       .attr('class', 'slope-chart__label')
-      .attr('x', innerW + 6)
+      .attr('x', innerW + 4)
       .attr('y', (_, i) => bumped[i])
       .attr('dy', '0.35em')
-      .attr('font-size', '10px')
       .attr('fill', (d) => d.color)
       .text((d) => d.label);
   }
 
-  /**
-   * Single top-to-bottom pass: pushes each label down if it's closer than minGap
-   * to the previous adjusted label. No iteration to convergence.
-   */
+  /** Floating value scale to the right of the parallel axes with a unit label. */
+  private renderScale(y: LinearScale, innerW: number, innerH: number): void {
+    const g = this.group('y-scale').attr('transform', `translate(${innerW + SCALE_X}, 0)`);
+    g.call(axisRight(y).ticks(5));
+
+    // Unit label rotated vertically beside the scale ticks
+    g.selectAll<SVGTextElement, string>('text.slope-chart__scale-title')
+      .data(['million tonnes'])
+      .join('text')
+      .attr('class', 'slope-chart__scale-title')
+      .attr('transform', `translate(36, ${innerH / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .text((d) => d);
+  }
+
+  /** Abbreviates labels that would overflow into the floating scale area. */
+  private shortLabel(label: string): string {
+    return label.length > 10 ? label.slice(0, 9) + '…' : label;
+  }
+
+  /** Single top-to-bottom pass that spreads overlapping labels downward. */
   private bumpLabels(entries: { y: number; minGap: number }[]): number[] {
     if (entries.length === 0) return [];
-
-    // Track original indices so we can map back after sorting
     const indexed = entries.map((e, i) => ({ ...e, originalIndex: i }));
     indexed.sort((a, b) => a.y - b.y);
-
     const adjusted = new Array<number>(entries.length);
-    let prevAdjustedY = -Infinity;
-
+    let prevY = -Infinity;
     for (const item of indexed) {
-      const bumped = Math.max(item.y, prevAdjustedY + item.minGap);
+      const bumped = Math.max(item.y, prevY + item.minGap);
       adjusted[item.originalIndex] = bumped;
-      prevAdjustedY = bumped;
+      prevY = bumped;
     }
-
     return adjusted;
   }
 

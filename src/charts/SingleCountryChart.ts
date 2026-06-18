@@ -10,6 +10,7 @@ import {
 import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
+import type { LensState } from '../state/LensState';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
 import { SlopeChart } from './SlopeChart';
@@ -52,14 +53,13 @@ export class SingleCountryChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
   private readonly slopeChart: SlopeChart;
-  // Drag overlay is bound once at construction; updated path d on each render.
   private overlayPath: Selection<SVGPathElement, SeriesEntry, SVGGElement, unknown> | null = null;
   private dragBound = false;
-  // Stub lens state — local to this row; replaced by real CountryLensState in Phase 4.
-  private lenses: LensWindow[] = [];
-  private lensActive = false;
-  // Last yearRange received from update(); used to rebuild fixture on toggle
-  private currentYearRange: [number, number] = [1990, 2022];
+
+  private lens: LensState | null = null;
+  private lensUnsub: (() => void) | null = null;
+  // Last year range from update(); needed to re-render after lens state changes
+  private currentYearRange: [number, number] = [1950, 2022];
 
   /** Settable by ChartArea after construction; fires on overlay drag events. */
   callbacks?: LineDragCallbacks;
@@ -76,33 +76,23 @@ export class SingleCountryChart {
     this.metric = metric;
     this.colorFor = colorFor;
 
-    // Root row wrapper — ChartArea's elementFromPoint walks up to .chart-area__row
     this.root = select(parent)
       .append('div')
       .attr('class', 'single-country-chart chart-area__row')
       .attr('data-country', country);
 
-    // Country label above the body — textContent only (XSS-safe per T-02-01)
     const label = this.root.append('div').attr('class', 'single-country-chart__label');
     label.node()!.textContent = country;
 
-    // Stub-lens toggle — per-row control; Phase 4 replaces this with real lens drag
-    const toggle = this.root.append('button').attr('class', 'single-country-chart__lens-toggle');
-    toggle.node()!.textContent = 'Lens';
-    toggle.on('click', () => this.handleLensToggle());
-
-    // Split body: line cell (existing svg) + slope cell (SlopeChart)
     const body = this.root.append('div').attr('class', 'single-country-chart__body');
     this.lineCell = body.append('div').attr('class', 'single-country-chart__line');
     const slopeCell = body.append('div').attr('class', 'single-country-chart__slope');
 
-    // Move svg into the line cell
     this.svg = this.lineCell.append('svg').attr('class', 'single-country-chart__svg');
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
 
-    // Mount SlopeChart in the slope cell; it appends its own div+svg
     this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
   }
 
@@ -111,13 +101,22 @@ export class SingleCountryChart {
   }
 
   destroy(): void {
+    this.lensUnsub?.();
     this.slopeChart.destroy();
     this.root.remove();
   }
 
+  /** Wire this chart to a shared LensState; subscribes and syncs immediately. */
+  setLens(lens: LensState): void {
+    this.lensUnsub?.();
+    this.lens = lens;
+    this.lensUnsub = lens.subscribe(() => this.syncLens());
+    this.syncLens();
+  }
+
   update(yearRange: [number, number]): void {
     this.currentYearRange = yearRange;
-    // Size line chart to its cell (2/3 when lens active, 100% otherwise)
+    // Reading clientWidth forces reflow so the flex-shrink layout has settled
     const width = this.lineCell.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
@@ -132,28 +131,89 @@ export class SingleCountryChart {
     const [yMin, yMax] = computeYDomain(entries);
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
+    // Lens band first so the line and axes render on top of it
+    this.renderLensBand(x, yearRange, innerW, innerH);
     this.renderAxes(x, y, innerH);
     this.renderLine(entries, x, y, innerW, innerH);
     this.renderDragOverlay(entries, x, y);
+  }
 
-    // Re-render slope only when active; recompute fixture from current yearRange
-    if (this.lensActive) {
-      this.lenses = buildFixtureLenses(yearRange);
-      this.slopeChart.render(this.country, this.lenses);
+  /** Called when LensState changes: show/hide slope + re-render to resize SVG and band. */
+  private syncLens(): void {
+    if (!this.lens) return;
+    const active = this.lens.isTarget(this.country);
+    this.root.classed('single-country-chart--lens-active', active);
+    // Re-render the line chart so the SVG resizes to the new line-cell width
+    this.update(this.currentYearRange);
+    if (active) {
+      // Defer slope render one frame so display:block has reflowed before measuring width
+      requestAnimationFrame(() => this.renderSlope());
+    } else {
+      this.slopeChart.clear();
     }
   }
 
-  private handleLensToggle(): void {
-    this.lensActive = !this.lensActive;
-    if (this.lensActive) {
-      this.lenses = buildFixtureLenses(this.currentYearRange);
-      this.root.classed('single-country-chart--lens-active', true);
-      this.slopeChart.render(this.country, this.lenses);
-    } else {
-      this.lenses = [];
-      this.root.classed('single-country-chart--lens-active', false);
-      this.slopeChart.clear();
+  private renderSlope(): void {
+    if (!this.lens) return;
+    const halfWidth = this.lens.currentWidth() / 2;
+    const center = this.lens.centerYear();
+    const lensWindow: LensWindow = {
+      startYear: Math.round(center - halfWidth),
+      endYear: Math.round(center + halfWidth),
+    };
+    this.slopeChart.render(this.country, [lensWindow]);
+  }
+
+  /** Draws the interactive lens band (tinted rect) on the SVG when this country is lensed. */
+  private renderLensBand(
+    x: LinearScale,
+    yearRange: [number, number],
+    innerW: number,
+    innerH: number,
+  ): void {
+    const bandGroup = this.group('lens-band');
+
+    if (!this.lens || !this.lens.isTarget(this.country)) {
+      bandGroup.selectAll('*').remove();
+      return;
     }
+
+    const halfW = this.lens.currentWidth() / 2;
+    const center = this.lens.centerYear();
+    const bandStart = Math.max(yearRange[0], center - halfW);
+    const bandEnd = Math.min(yearRange[1], center + halfW);
+    const bx = x(bandStart);
+    const bw = Math.max(0, x(bandEnd) - bx);
+
+    const lens = this.lens;
+
+    bandGroup
+      .selectAll<SVGRectElement, null>('rect.lens-band__rect')
+      .data([null])
+      .join('rect')
+      .attr('class', 'lens-band__rect')
+      .attr('x', bx)
+      .attr('y', 0)
+      .attr('width', bw)
+      .attr('height', innerH)
+      .call(
+        drag<SVGRectElement, null>()
+          .on('drag', (ev: D3DragEvent<SVGRectElement, null, unknown>) => {
+            const yearsPerPixel = (yearRange[1] - yearRange[0]) / innerW;
+            lens.setCenter(lens.centerYear() + ev.dx * yearsPerPixel);
+          }),
+      );
+
+    // Year labels at band edges
+    bandGroup
+      .selectAll<SVGTextElement, [number, number]>('text.lens-band__label')
+      .data([[bx, Math.round(center - halfW)], [bx + bw, Math.round(center + halfW)]] as [number, number][])
+      .join('text')
+      .attr('class', 'lens-band__label')
+      .attr('x', (d) => d[0])
+      .attr('y', -3)
+      .attr('text-anchor', (_, i) => (i === 0 ? 'start' : 'end'))
+      .text((d) => String(d[1]));
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
@@ -220,7 +280,6 @@ export class SingleCountryChart {
       .text('No data for selected range');
   }
 
-  // Bind drag once (T-02-02); update only the path d on subsequent renders.
   private renderDragOverlay(entries: SeriesEntry[], x: LinearScale, y: LinearScale): void {
     const generator = line<DataPoint>()
       .x((p) => x(p.year))
@@ -229,7 +288,6 @@ export class SingleCountryChart {
     const overlayGroup = this.group('drag-overlays');
 
     if (!this.dragBound) {
-      // Create the overlay path and bind drag exactly once.
       this.overlayPath = overlayGroup
         .selectAll<SVGPathElement, SeriesEntry>('path.single-line-hit')
         .data(entries, (d) => d.country)
@@ -256,7 +314,6 @@ export class SingleCountryChart {
       this.dragBound = true;
     }
 
-    // Always update the path shape to match the current year range / scale.
     if (this.overlayPath) {
       this.overlayPath.attr('d', (d) => generator(d.points) ?? '');
     }
@@ -269,16 +326,4 @@ export class SingleCountryChart {
       .join('g')
       .attr('class', name);
   }
-}
-
-/**
- * Builds two consecutive LensWindows that share a midpoint boundary (SLOPE-05).
- * The mid year is clamped to integer values inside the yearRange.
- */
-function buildFixtureLenses([rangeStart, rangeEnd]: [number, number]): LensWindow[] {
-  const mid = Math.round((rangeStart + rangeEnd) / 2);
-  return [
-    { startYear: rangeStart, endYear: mid },
-    { startYear: mid, endYear: rangeEnd },
-  ];
 }
