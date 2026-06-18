@@ -1,9 +1,15 @@
+import type { LensStage } from '../state/CountryLensState';
 import { CO2_SOURCES } from '../config';
 
 /** Phase-3 stub: a lens is represented as a closed [startYear, endYear] interval. */
 export interface LensWindow {
   startYear: number;
   endYear: number;
+}
+
+/** Extends LensWindow with stage metadata for per-stage slope coloring (LENS-05). */
+export interface StagedLensWindow extends LensWindow {
+  stage: LensStage;
 }
 
 /**

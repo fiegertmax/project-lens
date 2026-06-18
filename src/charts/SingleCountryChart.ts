@@ -14,7 +14,6 @@ import type { LensState } from '../state/LensState';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
 import { SlopeChart } from './SlopeChart';
-import type { LensWindow } from './slope-types';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -157,11 +156,10 @@ export class SingleCountryChart {
     if (!this.lens) return;
     const halfWidth = this.lens.currentWidth() / 2;
     const center = this.lens.centerYear();
-    const lensWindow: LensWindow = {
-      startYear: Math.round(center - halfWidth),
-      endYear: Math.round(center + halfWidth),
-    };
-    this.slopeChart.render(this.country, [lensWindow]);
+    // stage 1 default for legacy LensState path (replaced in Plan 04-04 Task 2)
+    this.slopeChart.render(this.country, [
+      { startYear: Math.round(center - halfWidth), endYear: Math.round(center + halfWidth), stage: 1 },
+    ]);
   }
 
   /** Draws the interactive lens band (tinted rect) on the SVG when this country is lensed. */
