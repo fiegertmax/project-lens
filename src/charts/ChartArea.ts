@@ -153,7 +153,8 @@ export class ChartArea {
           this.colorFor,
         );
         chart.callbacks = callbacks;
-        if (this.lensState) chart.setLens(this.lensState);
+        // LensState wiring removed: Plan 04-04 replaced setLens() with setLensState().
+        // Plan 05 will wire CountryLensState + LensSync into new rows here.
         this.rows.set(country, chart);
       }
     }
