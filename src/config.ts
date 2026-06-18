@@ -1,5 +1,4 @@
 import type { MetricDefinition, MetricKey } from './data/types';
-import type { LensEffectKey } from './lens/effects';
 
 /** Runtime URL of the dataset, served from public/. */
 export const DATA_URL = `${import.meta.env.BASE_URL}data/owid-co2-data.csv`;
@@ -94,11 +93,6 @@ export const CO2_SOURCES = [
   },
 ] as const;
 
-/** Lens window width bounds and default, in years. */
-export const LENS_WIDTH = { min: 3, max: 40, default: 10 };
-
-export const DEFAULT_LENS_EFFECT: LensEffectKey = 'growth-abs';
-
 // Single source of truth for lens stage colors — sidebar panel and slope lines both read from here (LENS-02).
 export const STAGE_COLORS: Record<1 | 2 | 3, string> = {
   1: '#2e9e5b',
@@ -106,5 +100,5 @@ export const STAGE_COLORS: Record<1 | 2 | 3, string> = {
   3: '#3b73c8',
 } as const;
 
-// Phase-4 name for lens year-span bounds; mirrors LENS_WIDTH values so behaviour is unchanged until Plan 05 removes LENS_WIDTH.
+/** Lens year-span bounds used by the stage-based placed-lens system (Phase 4). */
 export const LENS_STAGE_WIDTH = { min: 3, max: 40, default: 10 } as const;

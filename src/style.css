@@ -507,61 +507,7 @@ body {
   font-size: 11px;
 }
 
-/* Lens: active band + derived line (emphasized, distinct saturated colour) */
-.lens-band__rect {
-  fill: var(--lens-fill);
-  stroke: var(--lens-border);
-  stroke-width: 1;
-  cursor: grab;
-}
-
-.lens-band__rect:active {
-  cursor: grabbing;
-}
-
-.lens-band__label {
-  fill: var(--lens);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-.lens-line {
-  fill: none;
-  stroke: var(--lens);
-  stroke-width: 2.5;
-  pointer-events: none;
-}
-
-/* Secondary y-axis for the lens, coloured to match its derived line. */
-.line-chart__svg .lens-axis path,
-.line-chart__svg .lens-axis line {
-  stroke: var(--lens);
-}
-
-.line-chart__svg .lens-axis text {
-  fill: var(--lens);
-}
-
-.line-chart__svg .lens-axis__title {
-  font-size: 11px;
-  font-weight: 600;
-}
-
 /* Lens panel controls */
-.lens-panel__effects {
-  display: flex;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.lens-panel__effect {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
 .lens-panel__width {
   margin-bottom: 12px;
 }
@@ -725,14 +671,6 @@ body.lens-dragging {
 
 .lens-panel__button--hidden {
   display: none;
-}
-
-/* Stacked combine switches in the left panel */
-.lens-panel__combine {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 
 /* Reusable pill switch (compare / accumulate / mean), purple (--accent) when on */
