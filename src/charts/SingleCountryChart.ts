@@ -62,6 +62,7 @@ export class SingleCountryChart {
   private lensSync: LensSync | null = null;
   private lensUnsub: (() => void) | null = null;
   private currentYearRange: [number, number] = [1950, 2022];
+  private includeLUC = true;
   private readonly crosshair: CrosshairOverlay;
 
   /** Settable by ChartArea after construction; fires on overlay drag events. */
@@ -124,8 +125,9 @@ export class SingleCountryChart {
     this.renderLenses();
   }
 
-  update(yearRange: [number, number]): void {
+  update(yearRange: [number, number], includeLUC = true): void {
     this.currentYearRange = yearRange;
+    this.includeLUC = includeLUC;
     // Reading clientWidth forces reflow so the flex-shrink layout has settled
     const width = this.lineCell.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
@@ -134,7 +136,8 @@ export class SingleCountryChart {
     this.svg.attr('width', width).attr('height', HEIGHT);
 
     const rawSeries = this.dataset.series(this.country);
-    const points = rawSeries ? resolveSeries(rawSeries, yearRange) : [];
+    const extraColumn = includeLUC ? undefined : 'co2';
+    const points = rawSeries ? resolveSeries(rawSeries, yearRange, extraColumn) : [];
     const entries: SeriesEntry[] = [{ country: this.country, points }];
 
     const x = scaleLinear().domain(yearRange).range([0, innerW]);
@@ -162,7 +165,7 @@ export class SingleCountryChart {
         onChange: () => {
           const ls = this.lensState?.lensesFor(this.country) ?? [];
           if (ls.length > 0) requestAnimationFrame(() => this.renderSlope(ls));
-          this.update(this.currentYearRange);
+          this.update(this.currentYearRange, this.includeLUC);
         },
       });
     }
@@ -184,7 +187,7 @@ export class SingleCountryChart {
     const active = lenses.length > 0;
     this.root.classed('single-country-chart--lens-active', active);
     // Re-render the line chart so the SVG resizes to the new line-cell width
-    this.update(this.currentYearRange);
+    this.update(this.currentYearRange, this.includeLUC);
     if (active) {
       // Defer slope render one frame so display:block has reflowed before measuring width
       requestAnimationFrame(() => this.renderSlope(lenses));
@@ -194,9 +197,12 @@ export class SingleCountryChart {
   }
 
   private renderSlope(lenses: PlacedLens[]): void {
+    const excludeSources = this.includeLUC ? undefined : new Set(['land_use_change_co2']);
     this.slopeChart.render(
       this.country,
       lenses.map((l) => ({ stage: l.stage, startYear: l.startYear, endYear: l.endYear })),
+      undefined,
+      excludeSources,
     );
   }
 
@@ -205,9 +211,10 @@ export class SingleCountryChart {
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
     this.group('y-axis').call(axisLeft(y).ticks(5));
+    const metricLabel = this.includeLUC ? this.metric.label : 'Annual CO₂ (excl. LUC)';
     this.group('y-title')
       .selectAll<SVGTextElement, string>('text')
-      .data([`${this.metric.label} (${this.metric.unit})`])
+      .data([`${metricLabel} (${this.metric.unit})`])
       .join('text')
       .attr('class', 'single-country-chart__y-title')
       .attr('transform', `translate(${-MARGIN.left + 14},${innerH / 2}) rotate(-90)`)

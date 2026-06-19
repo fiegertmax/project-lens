@@ -59,6 +59,26 @@ body {
   color: var(--text-muted);
 }
 
+/* Global LUC toggle row */
+.luc-toggle-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.luc-toggle-panel__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex: 1;
+}
+
 /* Collapsible sections */
 .collapsible {
   border: 1px solid var(--border);

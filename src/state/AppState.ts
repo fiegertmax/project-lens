@@ -16,6 +16,7 @@ export class AppState {
   private year: number;
   private focusContinent: string | null = null;
   private vizMode: GlobalVizMode = 'sankey';
+  private lucEnabled = true;
   private readonly listeners = new Set<Listener>();
 
   constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {
@@ -85,6 +86,16 @@ export class AppState {
   setGlobalVizMode(mode: GlobalVizMode): void {
     if (mode === this.vizMode) return;
     this.vizMode = mode;
+    this.notify();
+  }
+
+  includeLandUseChange(): boolean {
+    return this.lucEnabled;
+  }
+
+  setIncludeLandUseChange(val: boolean): void {
+    if (val === this.lucEnabled) return;
+    this.lucEnabled = val;
     this.notify();
   }
 

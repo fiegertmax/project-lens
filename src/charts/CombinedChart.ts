@@ -180,9 +180,11 @@ export class CombinedChart {
     // Use externally-supplied list; ChartArea overrides via updateCountries()
     const countries = this.countries;
 
+    const includeLUC = this.state.includeLandUseChange();
+    const extraColumn = includeLUC ? undefined : 'co2';
     const entries: SeriesEntry[] = countries.map((country) => {
       const series = this.dataset.series(country);
-      return { country, points: series ? resolveSeries(series, yearRange) : [] };
+      return { country, points: series ? resolveSeries(series, yearRange, extraColumn) : [] };
     });
 
     const x = scaleLinear().domain(yearRange).range([0, innerW]);
@@ -194,7 +196,7 @@ export class CombinedChart {
       ? this.colorFor
       : (c: string) => scaleOrdinal(countries, schemeTableau10 as readonly string[])(c);
 
-    this.renderAxes(x, y, innerH);
+    this.renderAxes(x, y, innerH, includeLUC);
     this.renderLines(entries, x, y, color, innerW, innerH);
     this.renderLegend(countries, color, innerW);
     this.renderLensBands();
@@ -206,14 +208,15 @@ export class CombinedChart {
     })));
   }
 
-  private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
+  private renderAxes(x: LinearScale, y: LinearScale, innerH: number, includeLUC: boolean): void {
     this.group('x-axis')
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
     this.group('y-axis').call(axisLeft(y).ticks(5));
+    const metricLabel = includeLUC ? this.metric.label : 'Annual CO₂ (excl. LUC)';
     this.group('y-title')
       .selectAll<SVGTextElement, string>('text')
-      .data([`${this.metric.label} (${this.metric.unit})`])
+      .data([`${metricLabel} (${this.metric.unit})`])
       .join('text')
       .attr('class', 'combined-chart__y-title')
       .attr('transform', `translate(${-MARGIN.left + 14},${innerH / 2}) rotate(-90)`)
@@ -456,6 +459,7 @@ export class CombinedChart {
       this.dataset,
       this.state.yearRange(),
       mode,
+      this.state.includeLandUseChange(),
     );
     this.slopeChart.renderAggregated(aggregated);
   }

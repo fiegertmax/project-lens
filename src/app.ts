@@ -16,9 +16,11 @@ import type { YearRange } from './state/AppState';
 import { CountryLensState } from './state/CountryLensState';
 import { PieLensState } from './state/PieLensState';
 import { ConfigPanel } from './ui/ConfigPanel';
+import { InfoTip } from './ui/InfoTip';
 import { LensStagePanel } from './ui/LensStagePanel';
 import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
+import { ToggleSwitch } from './ui/ToggleSwitch';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
 export class App {
@@ -57,6 +59,7 @@ export class App {
     main.className = 'app__main';
     this.root.append(sidebar, main);
 
+    this.buildLucToggle(sidebar, state);
     new ConfigPanel(sidebar, dataset, state, bounds);
     new LensStagePanel(sidebar, lensState);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
@@ -98,6 +101,33 @@ export class App {
     state.subscribe(syncView);
     window.addEventListener('resize', syncView);
     syncView();
+  }
+
+  private buildLucToggle(sidebar: HTMLElement, state: AppState): void {
+    const panel = document.createElement('div');
+    panel.className = 'luc-toggle-panel';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'luc-toggle-panel__label';
+    labelEl.textContent = 'Land use change';
+    panel.appendChild(labelEl);
+
+    const toggle = new ToggleSwitch(panel, true);
+    toggle.set({ checked: true, disabled: false, label: 'Included' });
+
+    new InfoTip(
+      panel,
+      'Land use change (LUC) CO₂ captures emissions from deforestation and land conversion — and can be negative when forests grow back. Excluding it shows all emissions exluding LUC, which often reveals cleaner long-term trends obscured by LUC volatility.',
+      'Land use change explanation',
+    );
+
+    toggle.onChange(() => {
+      const included = toggle.checked();
+      toggle.set({ checked: included, disabled: false, label: included ? 'Included' : 'Excluded' });
+      state.setIncludeLandUseChange(included);
+    });
+
+    sidebar.appendChild(panel);
   }
 
   /** Restrict the slider to years that actually carry data. */

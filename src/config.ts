@@ -35,6 +35,7 @@ export const DEFAULT_METRIC: MetricDefinition = METRICS.co2_including_luc;
 
 /** Auxiliary columns retained for lens effects (read directly, never recomputed). */
 export const EXTRA_COLUMNS: readonly string[] = [
+  'co2',
   'co2_per_capita',
   'co2_growth_abs',
   'co2_growth_prct',

@@ -66,7 +66,12 @@ export class SlopeChart {
    * yDomain, when provided, pins the y-axis to the same domain as the line chart so
    * slopes are directly comparable to the values shown on the left axis (SLOPE-06).
    */
-  render(country: string, lenses: StagedLensWindow[], yDomain?: [number, number]): void {
+  render(
+    country: string,
+    lenses: StagedLensWindow[],
+    yDomain?: [number, number],
+    excludeSources?: ReadonlySet<string>,
+  ): void {
     if (lenses.length === 0) {
       this.clear();
       return;
@@ -82,7 +87,7 @@ export class SlopeChart {
     const columns = this.columnPositions(lenses, innerW);
 
     // Collect all source entries across all lenses to build a shared y-axis.
-    const allEntries: SourceEntry[][] = lenses.map((lens) => this.buildEntries(country, lens));
+    const allEntries: SourceEntry[][] = lenses.map((lens) => this.buildEntries(country, lens, excludeSources));
 
     // Use the caller-supplied domain (line chart's y-axis) when available so source slopes
     // are readable at the same scale as the main chart. Fall back to auto-fit from source values.
@@ -174,14 +179,14 @@ export class SlopeChart {
     return map;
   }
 
-  /** Builds the source entries for a single lens. */
-  private buildEntries(country: string, lens: StagedLensWindow): SourceEntry[] {
+  /** Builds the source entries for a single lens. Excluded sources produce undefined values. */
+  private buildEntries(country: string, lens: StagedLensWindow, excludeSources?: ReadonlySet<string>): SourceEntry[] {
     return EMISSION_SOURCES.map((src) => ({
       key: `${lens.stage}-${src.key}`,
       label: src.label,
       color: src.color,
-      leftValue: getSourceValue(this.dataset, country, src.key, lens.startYear),
-      rightValue: getSourceValue(this.dataset, country, src.key, lens.endYear),
+      leftValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.startYear),
+      rightValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.endYear),
     }));
   }
 

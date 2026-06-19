@@ -163,7 +163,8 @@ export class ChartArea {
 
     // (7) Update year range on all single-country rows
     const yearRange = this.state.yearRange();
-    for (const chart of this.rows.values()) chart.update(yearRange);
+    const includeLUC = this.state.includeLandUseChange();
+    for (const chart of this.rows.values()) chart.update(yearRange, includeLUC);
 
     // (8) Drive combined chart country list (after rows are updated so extraction is visible)
     const combinedCountries = selected.filter((c) => !this.extractedCountries.includes(c));

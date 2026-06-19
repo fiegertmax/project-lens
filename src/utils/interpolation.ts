@@ -1,4 +1,4 @@
-import type { CountrySeries, DataPoint } from '../data/types';
+import type { CountrySeries, DataPoint, RawPoint } from '../data/types';
 
 /**
  * Resolve a raw series into renderable points within [minYear, maxYear].
@@ -6,15 +6,22 @@ import type { CountrySeries, DataPoint } from '../data/types';
  * (anywhere in the series, not just the visible range) is filled with the
  * midpoint of its nearest neighbours and flagged isMissing. Leading/trailing
  * gaps with no neighbour on one side are omitted.
+ *
+ * When extraColumn is set, values are read from point.extra[extraColumn]
+ * instead of point.value (e.g. 'co2' to show fossil-only emissions).
  */
 export function resolveSeries(
   series: CountrySeries,
   [minYear, maxYear]: [number, number],
+  extraColumn?: string,
 ): DataPoint[] {
-  const real = series.points.filter((p) => Number.isFinite(p.value));
+  const getValue = (p: RawPoint): number =>
+    extraColumn !== undefined ? p.extra[extraColumn] : p.value;
+
+  const real = series.points.filter((p) => Number.isFinite(getValue(p)));
   if (real.length === 0) return [];
 
-  const valueByYear = new Map(real.map((p) => [p.year, p.value]));
+  const valueByYear = new Map(real.map((p) => [p.year, getValue(p)]));
   const firstYear = real[0].year;
   const lastYear = real[real.length - 1].year;
 
