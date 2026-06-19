@@ -14,68 +14,55 @@ function singleCountryChartAt(x: number, y: number): HTMLElement | null {
   return el?.closest<HTMLElement>('.single-country-chart[data-country]') ?? null;
 }
 
-/** Sidebar panel: three progressively-revealed stage icons (display:none gating), a
- *  placement-span slider, and drag-to-place onto single-country charts with Shift-linking. */
+/** Sidebar panel: three progressively-revealed stage icons with paired remove buttons,
+ *  and drag-to-place onto single-country charts. */
 export class LensStagePanel {
   readonly root: HTMLDivElement;
 
   private readonly state: CountryLensState;
   private readonly stageButtons = new Map<LensStage, HTMLButtonElement>();
-  /** Span in years used when placing a new lens. */
-  private spanYears: number = LENS_STAGE_WIDTH.default;
+  private readonly removeButtons = new Map<LensStage, HTMLButtonElement>();
 
   constructor(parent: HTMLElement, state: CountryLensState) {
     this.state = state;
     const panel = new Collapsible(parent, 'Lens', 'lens-stage-panel');
     this.root = panel.root;
 
-    this.buildWidthControl(panel.body);
     this.buildStageIcons(panel.body);
 
     state.subscribe(() => this.syncStages());
     this.syncStages();
   }
 
-  private buildWidthControl(parent: HTMLElement): void {
-    const wrap = document.createElement('div');
-    wrap.className = 'lens-stage-panel__width';
-
-    const label = document.createElement('span');
-    label.className = 'lens-stage-panel__width-label';
-    label.textContent = `Width: ${this.spanYears} yrs`;
-
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(LENS_STAGE_WIDTH.min);
-    slider.max = String(LENS_STAGE_WIDTH.max);
-    slider.step = '1';
-    slider.value = String(this.spanYears);
-    slider.addEventListener('input', () => {
-      this.spanYears = Number(slider.value);
-      label.textContent = `Width: ${this.spanYears} yrs`;
-    });
-
-    wrap.append(label, slider);
-    parent.appendChild(wrap);
-  }
-
   private buildStageIcons(parent: HTMLElement): void {
-    const iconRow = document.createElement('div');
-    iconRow.className = 'lens-stage-panel__icons';
+    const list = document.createElement('div');
+    list.className = 'lens-stage-panel__list';
 
     for (const stage of STAGES) {
+      const row = document.createElement('div');
+      row.className = 'lens-stage-panel__row';
+
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `lens-stage-icon lens-stage-icon--stage-${stage}`;
       // innerHTML is safe here: LENS_ICON is a trusted static SVG constant, not user data
       btn.innerHTML = LENS_ICON;
-      btn.setAttribute('title', `Drag onto a country chart to place a stage-${stage} lens (hold Shift to link)`);
+      btn.setAttribute('title', `Drag onto a country chart to place a stage-${stage} lens`);
       this.stageButtons.set(stage, btn);
       this.wireDrag(btn, stage);
-      iconRow.appendChild(btn);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = `lens-stage-panel__remove lens-stage-panel__remove--stage-${stage}`;
+      removeBtn.textContent = 'Remove Lens';
+      removeBtn.addEventListener('click', () => this.state.removeStage(stage));
+      this.removeButtons.set(stage, removeBtn);
+
+      row.append(btn, removeBtn);
+      list.appendChild(row);
     }
 
-    parent.appendChild(iconRow);
+    parent.appendChild(list);
   }
 
   private wireDrag(btn: HTMLButtonElement, stage: LensStage): void {
@@ -85,6 +72,8 @@ export class LensStagePanel {
         previous?.classList.remove('single-country-chart--drop');
         target?.classList.add('single-country-chart--drop');
       },
+      // Place on each chart swept over while Shift is held
+      onSweep: (target) => this.placeOn(target, stage, true),
       onDrop: (target, { shift }) => this.placeOn(target, stage, shift),
     });
   }
@@ -94,20 +83,7 @@ export class LensStagePanel {
     if (!country) return;
 
     const { startYear, endYear } = this.placementWindow(chartEl);
-
     this.state.placeLens(country, { stage, startYear, endYear, linked: shift });
-
-    if (shift) {
-      // Fan placement across every other visible single-country chart (LENSUI-03)
-      const others = document.querySelectorAll<HTMLElement>('.single-country-chart[data-country]');
-      for (const el of others) {
-        if (el === chartEl) continue;
-        const otherCountry = el.dataset.country;
-        if (!otherCountry) continue;
-        const win = this.placementWindow(el);
-        this.state.placeLens(otherCountry, { stage, startYear: win.startYear, endYear: win.endYear, linked: true });
-      }
-    }
   }
 
   /** Derives a placement window centered in the chart's visible year domain.
@@ -117,18 +93,25 @@ export class LensStagePanel {
     const rawEnd = chartEl.dataset.yearEnd;
     const domainStart = rawStart ? Number(rawStart) : 1950;
     const domainEnd = rawEnd ? Number(rawEnd) : 2024;
-
+    const span = LENS_STAGE_WIDTH.default;
     const center = Math.round((domainStart + domainEnd) / 2);
-    const half = Math.round(this.spanYears / 2);
-    return { startYear: center - half, endYear: center - half + this.spanYears };
+    const half = Math.round(span / 2);
+    return { startYear: center - half, endYear: center - half + span };
   }
 
-  /** Toggle `lens-stage-icon--hidden` on stage buttons based on availableStages().
-   *  Stage 1 is always visible; stages 2/3 appear only when available (LENS-03, Success Criterion 2). */
+  /**
+   * Syncs stage icon visibility and remove button visibility.
+   * Stage icons: shown only when available (LENS-03).
+   * Remove buttons: shown only when lenses of that stage actually exist.
+   */
   private syncStages(): void {
     const available = new Set(this.state.availableStages());
+    const placed = new Set(this.state.allLenses().map(({ lens }) => lens.stage));
     for (const [stage, btn] of this.stageButtons) {
       btn.classList.toggle('lens-stage-icon--hidden', !available.has(stage));
+    }
+    for (const [stage, btn] of this.removeButtons) {
+      btn.classList.toggle('lens-stage-panel__remove--hidden', !placed.has(stage));
     }
   }
 }

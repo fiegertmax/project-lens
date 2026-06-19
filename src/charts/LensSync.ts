@@ -25,34 +25,25 @@ export class LensSync {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    // Snapshot stage/linked before any mutation.
-    const { stage, linked } = origin;
-
     this.state.moveLens(originCountry, originId, deltaYears);
 
-    if (linked) {
-      for (const { country, lens } of this.linkedSiblings(stage, originId)) {
-        this.state.moveLens(country, lens.id, deltaYears);
-      }
+    for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
+      this.state.moveLens(country, lens.id, deltaYears);
     }
   }
 
   /**
-   * Resizes the origin lens to newSpan. If the origin is linked, fans the same
-   * span to every other linked lens of the same stage.
+   * Resizes the origin lens to newSpan and fans the same span to every other
+   * lens of the same stage across all countries.
    */
   resizeLinkedLens(originCountry: string, originId: string, newSpan: number): void {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    const { stage, linked } = origin;
-
     this.state.resizeLens(originCountry, originId, newSpan);
 
-    if (linked) {
-      for (const { country, lens } of this.linkedSiblings(stage, originId)) {
-        this.state.resizeLens(country, lens.id, newSpan);
-      }
+    for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
+      this.state.resizeLens(country, lens.id, newSpan);
     }
   }
 
@@ -62,10 +53,10 @@ export class LensSync {
     return this.state.lensesFor(country).find(l => l.id === id) ?? null;
   }
 
-  /** All linked lenses of the given stage, excluding the origin id. */
-  private linkedSiblings(stage: LensStage, excludeId: string) {
+  /** All lenses of the given stage across all countries, excluding the origin id. */
+  private stageSiblings(stage: LensStage, excludeId: string) {
     return this.state.allLenses().filter(
-      ({ lens }) => lens.linked && lens.stage === stage && lens.id !== excludeId,
+      ({ lens }) => lens.stage === stage && lens.id !== excludeId,
     );
   }
 }

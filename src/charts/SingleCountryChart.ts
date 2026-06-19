@@ -229,6 +229,24 @@ export class SingleCountryChart {
       .attr('y', -3)
       .attr('text-anchor', (d) => d.anchor)
       .text((d) => String(d.year));
+
+    // Remove button: × at the top-right of each band
+    bandGroup
+      .selectAll<SVGTextElement, PlacedLens>('text.placed-lens__remove')
+      .data(lenses, (d) => d.id)
+      .join('text')
+      .attr('class', 'placed-lens__remove')
+      .attr('x', (d) => x(Math.min(yearRange[1], d.endYear)) - 3)
+      .attr('y', 14)
+      .attr('text-anchor', 'end')
+      .attr('font-size', '13px')
+      .attr('fill', (d) => STAGE_COLORS[d.stage])
+      .attr('cursor', 'pointer')
+      .text('×')
+      .on('click', (ev, d) => {
+        ev.stopPropagation();
+        this.lensState?.removeLens(this.country, d.id);
+      });
   }
 
   /**

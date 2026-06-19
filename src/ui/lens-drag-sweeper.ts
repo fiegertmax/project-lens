@@ -8,8 +8,8 @@ export interface LensDragSweeperOptions<T> {
   resolveTarget(x: number, y: number): T | null;
   /** Called whenever the hovered target changes; receives the previous target too. */
   onHover?(target: T | null, previous: T | null): void;
-  /** Called once on pointer release (with shift state at release time). */
-  onDrop(target: T | null, opts: { shift: boolean }): void;
+  /** Called once on pointer release; `visited` is every unique target hovered during the drag. */
+  onDrop(target: T | null, opts: { shift: boolean; visited: Set<T> }): void;
   /** Called for every newly-hovered target while Shift is held (additive sweep). */
   onSweep?(target: T): void;
   /** Checked right before the ghost is created; return false to cancel the drag. */
@@ -28,6 +28,7 @@ export function createLensDragSweeper<T>(
   let ghost: HTMLElement | null = null;
   let hovered: T | null = null;
   const sweptKeys = new Set<T>();
+  const visitedTargets = new Set<T>();
 
   const begin = (): void => {
     dragging = true;
@@ -48,6 +49,7 @@ export function createLensDragSweeper<T>(
     if (hovered === target) return;
     options.onHover?.(target, hovered);
     hovered = target;
+    if (target !== null) visitedTargets.add(target);
   };
 
   const end = (): void => {
@@ -57,6 +59,7 @@ export function createLensDragSweeper<T>(
     dragging = false;
     origin = null;
     sweptKeys.clear();
+    visitedTargets.clear();
     document.body.classList.remove('lens-dragging');
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
@@ -86,7 +89,8 @@ export function createLensDragSweeper<T>(
   const onUp = (event: PointerEvent): void => {
     if (dragging) {
       const target = options.resolveTarget(event.clientX, event.clientY);
-      options.onDrop(target, { shift: event.shiftKey });
+      if (target !== null) visitedTargets.add(target);
+      options.onDrop(target, { shift: event.shiftKey, visited: new Set(visitedTargets) });
     }
     end();
   };

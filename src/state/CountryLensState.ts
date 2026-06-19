@@ -108,8 +108,8 @@ export class CountryLensState {
     const lens = lenses[idx];
     const moved: PlacedLens = {
       ...lens,
-      startYear: lens.startYear + deltaYears,
-      endYear: lens.endYear + deltaYears,
+      startYear: Math.round(lens.startYear + deltaYears),
+      endYear: Math.round(lens.endYear + deltaYears),
     };
     const others = lenses.filter(l => l.id !== id);
     if (others.some(l => this.overlaps(moved, l))) return false;
@@ -148,9 +148,22 @@ export class CountryLensState {
     const lenses = this.byCountry.get(country);
     if (!lenses) return;
     const filtered = lenses.filter(l => l.id !== id);
-    if (filtered.length === lenses.length) return; // nothing removed, skip notify
+    if (filtered.length === lenses.length) return;
     this.byCountry.set(country, filtered);
     this.notify();
+  }
+
+  /** Removes all lenses of the given stage across all countries and fires a single notify. */
+  removeStage(stage: LensStage): void {
+    let changed = false;
+    for (const [country, lenses] of this.byCountry) {
+      const filtered = lenses.filter(l => l.stage !== stage);
+      if (filtered.length !== lenses.length) {
+        this.byCountry.set(country, filtered);
+        changed = true;
+      }
+    }
+    if (changed) this.notify();
   }
 
   // --- helpers ---

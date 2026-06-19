@@ -1167,6 +1167,41 @@ body.line-dragging {
 
 /* Phase 4: staged lens icons + placed lens bands */
 
+.lens-stage-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Each stage occupies one row: [icon] [remove button] */
+.lens-stage-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lens-stage-panel__remove {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.lens-stage-panel__remove:hover {
+  opacity: 0.75;
+}
+
+.lens-stage-panel__remove--stage-1 { color: var(--stage-1-color); }
+.lens-stage-panel__remove--stage-2 { color: var(--stage-2-color); }
+.lens-stage-panel__remove--stage-3 { color: var(--stage-3-color); }
+
+.lens-stage-panel__remove--hidden {
+  display: none;
+}
+
 /* Sidebar drag handle for a staged lens — mirrors .lens-panel__lens-icon sizing */
 .lens-stage-icon {
   display: grid;
@@ -1224,4 +1259,18 @@ body.line-dragging {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+}
+
+.placed-lens__remove {
+  user-select: none;
+  pointer-events: all;
+}
+
+.placed-lens__remove:hover {
+  opacity: 0.7;
+}
+
+/* Dashed bridge between end of one lens slope and start of the next */
+.slope-chart__connector {
+  fill: none;
 }
