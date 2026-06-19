@@ -1127,6 +1127,41 @@ body.line-dragging {
   display: block;
 }
 
+/* Combined chart body — mirrors .single-country-chart__body */
+.combined-chart__body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Line chart cell fills remaining body width (distinct from .combined-chart__line--dragging opacity modifier) */
+.combined-chart__line {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Slope panel reserves 1/3 width, hidden until lens active */
+.combined-chart__slope {
+  flex: 0 0 33.333%;
+  min-width: 0;
+  display: none;
+}
+
+/* Reveal slope panel when a lens is active on the combined chart */
+.combined-chart--lens-active .combined-chart__slope {
+  display: block;
+}
+
+/* Toggle row above the slope chart SVG, right-aligned */
+.combined-chart__slope-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 0;
+}
+
 /* SVG fills the 1/3 slope panel container */
 .slope-chart__svg {
   width: 100%;
