@@ -89,7 +89,12 @@ export class LensStagePanel {
   private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean): void {
     if (!chartEl) return;
     const key = chartEl.dataset.country ?? COMBINED_CHART_KEY;
-    const { startYear, endYear } = this.placementWindow(chartEl);
+    // If a lens of this stage already exists elsewhere, inherit its boundaries so
+    // the new lens starts in sync with its peers (drag/zoom moves all together).
+    const sibling = this.state.allLenses().find(({ lens }) => lens.stage === stage);
+    const { startYear, endYear } = sibling
+      ? { startYear: sibling.lens.startYear, endYear: sibling.lens.endYear }
+      : this.placementWindow(chartEl);
     this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
   }
 

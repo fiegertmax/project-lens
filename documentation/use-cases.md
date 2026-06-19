@@ -20,19 +20,17 @@ As a user, I want to be able to discover trends in CO2-emissions and understand 
 - the slope chart contains a line for each emission origin
 
 ## UC-02: Reseach common main emission drivers to encounter common trends in multiple countries
-
+- the lens implemented from the prior use case can be used on a chart that contains multiple lines
+- the lens behaves just as the other lenses: when applied with shift to multiple graphs, all can move and zoom together, no matter which type of graph they are on
+- on the right, a slope graph appears just like it currently does
+- the slope graph displays the common (mean) slope for all the countries within the lens scope
+- the user can toggle how the mean is calculated: in total or proportional?
 
 ## UC-03: Research trends in per-capita emissions with respect to the gdp
 
 
 ## Other TODOs
-*Missing for UC-01 (phases 3,4):*
-- lens can be applied in order to display slope graph
-- multiple lenses can be applied to the same country
-- the same lens can be applied to multiple countries
-
 *Current Bug:*
-- dragging from one chart removes it from the prior chart: FIXED
 - remaining bug: lines can't be added to 'new charts' (all charts under the base one) 
 - we should get rid of the combinedchart <> single country chart stuff; both should behave the same
 

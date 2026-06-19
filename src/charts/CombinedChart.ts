@@ -21,6 +21,7 @@ import type { LensSync } from './LensSync';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
+import { InfoTip } from '../ui/InfoTip';
 import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
 import { crossCountryMean } from '../utils/crossCountryMean';
 import type { MeanMode } from '../utils/crossCountryMean';
@@ -64,7 +65,6 @@ export class CombinedChart {
   private readonly weightedToggle: ToggleSwitch;
   private readonly unsub: () => void;
   private useWeightedMean = false;
-  private currentYDomain: [number, number] | undefined;
 
   /** Externally-supplied country list; overrides state.selectedCountries() in update(). */
   private countries: string[];
@@ -109,6 +109,11 @@ export class CombinedChart {
     const toggleRow = slopeCell.append('div').attr('class', 'combined-chart__slope-header');
     this.weightedToggle = new ToggleSwitch(toggleRow.node()!, true);
     this.weightedToggle.set({ checked: false, disabled: false, label: 'Simple mean' });
+    new InfoTip(
+      toggleRow.node()!,
+      'Simple mean: each visible country contributes equally to the average — useful when all countries should have the same influence regardless of size.\n\nWeighted mean: each country\'s contribution is scaled by its total emissions over the selected year range — larger emitters have more influence on the result.',
+      'Mean type explanation',
+    );
     this.weightedToggle.onChange(() => {
       this.useWeightedMean = this.weightedToggle.checked();
       // Update label to reflect current mode (CMEAN-03)
@@ -179,8 +184,6 @@ export class CombinedChart {
 
     const x = scaleLinear().domain(yearRange).range([0, innerW]);
     const [yMin, yMax] = computeYDomain(entries);
-    // Cache for renderSlope() so slope chart shares the line chart's y-scale (CMEAN-05)
-    this.currentYDomain = [yMin, yMax];
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
     // Prefer shared colorFor to avoid color shifts when countries are extracted
@@ -446,7 +449,7 @@ export class CombinedChart {
       this.state.yearRange(),
       mode,
     );
-    this.slopeChart.renderAggregated(aggregated, this.currentYDomain);
+    this.slopeChart.renderAggregated(aggregated);
   }
 
   private renderLensBands(): void {
