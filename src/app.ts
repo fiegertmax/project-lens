@@ -60,6 +60,7 @@ export class App {
     this.root.append(sidebar, main);
 
     this.buildLucToggle(sidebar, state);
+    this.buildPerCapitaToggle(sidebar, state);
     new ConfigPanel(sidebar, dataset, state, bounds);
     new LensStagePanel(sidebar, lensState);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
@@ -125,6 +126,27 @@ export class App {
       const included = toggle.checked();
       toggle.set({ checked: included, disabled: false, label: included ? 'Included' : 'Excluded' });
       state.setIncludeLandUseChange(included);
+    });
+
+    sidebar.appendChild(panel);
+  }
+
+  private buildPerCapitaToggle(sidebar: HTMLElement, state: AppState): void {
+    const panel = document.createElement('div');
+    panel.className = 'percapita-toggle-panel';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'percapita-toggle-panel__label';
+    labelEl.textContent = 'Per capita';
+    panel.appendChild(labelEl);
+
+    const toggle = new ToggleSwitch(panel, true);
+    toggle.set({ checked: false, disabled: false, label: 'Absolute' });
+
+    toggle.onChange(() => {
+      const perCapita = toggle.checked();
+      toggle.set({ checked: perCapita, disabled: false, label: perCapita ? 'Per capita' : 'Absolute' });
+      state.setMetricMode(perCapita ? 'per-capita' : 'absolute');
     });
 
     sidebar.appendChild(panel);
