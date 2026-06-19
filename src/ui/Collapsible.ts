@@ -3,13 +3,15 @@ export class Collapsible {
   readonly root: HTMLDivElement;
   readonly body: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
+  private readonly headerEl: HTMLDivElement;
   private collapsed = true;
 
   constructor(parent: HTMLElement, title: string, className = '') {
     this.root = document.createElement('div');
     this.root.className = ['collapsible', className].filter(Boolean).join(' ');
 
-    const header = document.createElement('div');
+    this.headerEl = document.createElement('div');
+    const header = this.headerEl;
     header.className = 'collapsible__header';
 
     this.toggle = document.createElement('button');
@@ -29,6 +31,11 @@ export class Collapsible {
     this.root.append(header, this.body);
     parent.appendChild(this.root);
     this.setCollapsed(this.collapsed);
+  }
+
+  /** Append extra content (e.g. an icon button) to the right of the header title. */
+  appendToHeader(el: HTMLElement): void {
+    this.headerEl.appendChild(el);
   }
 
   private setCollapsed(collapsed: boolean): void {

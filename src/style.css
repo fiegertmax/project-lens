@@ -12,6 +12,14 @@
   --lens-fill: rgba(13, 148, 136, 0.16);
   --lens-border: rgba(13, 148, 136, 0.55);
 
+  /* Stage colors — single source of truth mirroring config STAGE_COLORS (LENS-02) */
+  --stage-1-color: #2e9e5b;
+  --stage-2-color: #e08a2e;
+  --stage-3-color: #3b73c8;
+  --stage-1-fill: rgba(46, 158, 91, 0.16);
+  --stage-2-fill: rgba(224, 138, 46, 0.16);
+  --stage-3-fill: rgba(59, 115, 200, 0.16);
+
   font: 15px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -49,6 +57,26 @@ body {
 .app__loading {
   padding: 24px;
   color: var(--text-muted);
+}
+
+/* Global LUC toggle row */
+.luc-toggle-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.luc-toggle-panel__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex: 1;
 }
 
 /* Collapsible sections */
@@ -499,50 +527,7 @@ body {
   font-size: 11px;
 }
 
-/* Lens: active band + derived line (emphasized, distinct saturated colour) */
-.lens-band {
-  fill: var(--lens-fill);
-  stroke: var(--lens-border);
-  stroke-width: 1;
-  cursor: ew-resize;
-}
-
-.lens-line {
-  fill: none;
-  stroke: var(--lens);
-  stroke-width: 2.5;
-  pointer-events: none;
-}
-
-/* Secondary y-axis for the lens, coloured to match its derived line. */
-.line-chart__svg .lens-axis path,
-.line-chart__svg .lens-axis line {
-  stroke: var(--lens);
-}
-
-.line-chart__svg .lens-axis text {
-  fill: var(--lens);
-}
-
-.line-chart__svg .lens-axis__title {
-  font-size: 11px;
-  font-weight: 600;
-}
-
 /* Lens panel controls */
-.lens-panel__effects {
-  display: flex;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.lens-panel__effect {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
 .lens-panel__width {
   margin-bottom: 12px;
 }
@@ -678,7 +663,14 @@ body.lens-dragging {
   user-select: none;
 }
 
-.line-chart--drop {
+.single-country-chart--drop {
+  outline: 2px dashed var(--lens-border);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Lens-drop highlight for the combined chart — mirrors the single-country drop ring. */
+.combined-chart--drop {
   outline: 2px dashed var(--lens-border);
   outline-offset: 3px;
   border-radius: 6px;
@@ -706,14 +698,6 @@ body.lens-dragging {
 
 .lens-panel__button--hidden {
   display: none;
-}
-
-/* Stacked combine switches in the left panel */
-.lens-panel__combine {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 
 /* Reusable pill switch (compare / accumulate / mean), purple (--accent) when on */
@@ -1043,4 +1027,378 @@ body.pie-lens-dragging {
   gap: 6px;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* Phase 2: chart area drag-to-extract */
+
+/* Scrollable column that holds combined chart, extracted rows, and spacer */
+.chart-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Wrapper for each chart row — drop ring applied via --drop modifier */
+.chart-area__row {
+  position: relative;
+}
+
+/* Always-present empty drop zone below all chart rows */
+.chart-area__drop-spacer {
+  min-height: 64px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+/* Drop-target highlight on a chart row */
+.chart-area__row--drop,
+.combined-chart.chart-area__row--drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Empty-zone highlight on the spacer */
+.chart-area__drop-spacer--drop {
+  background: var(--accent-soft);
+}
+
+/* Floating pill ghost — follows cursor during line drag */
+.line-ghost {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  /* color is set inline to the country's line color */
+}
+
+/* Grabbing cursor on body during active line drag */
+body.line-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Grab cursor on transparent hit overlay paths */
+.combined-chart .combined-line-hit,
+.single-country-chart .single-line-hit {
+  cursor: grab;
+}
+
+/* Source line dims during active drag */
+.combined-chart__line--dragging,
+.single-line--dragging {
+  opacity: 0.2;
+}
+
+/* Container for an extracted single-country row */
+.single-country-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Country name label above the SVG */
+.single-country-chart__label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+/* SVG fills its container width */
+.single-country-chart__svg {
+  width: 100%;
+}
+
+/* Horizontal container: line chart left, slope panel right */
+.single-country-chart__body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Line chart fills remaining body width (grows to fill after slope panel + gap) */
+.single-country-chart__line {
+  flex: 1 1 0;
+  min-width: 0; /* allows SVG to shrink inside flex */
+}
+
+/* Slope panel reserves 1/3 width but stays hidden until a lens is active (SLOPE-02) */
+.single-country-chart__slope {
+  flex: 0 0 33.333%;
+  min-width: 0;
+  display: none;
+}
+
+/* Lens-active modifier: reveal the slope panel (SLOPE-01) */
+.single-country-chart--lens-active .single-country-chart__slope {
+  display: block;
+}
+
+/* Combined chart body — mirrors .single-country-chart__body */
+.combined-chart__body {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+/* Line chart cell fills remaining body width (distinct from .combined-chart__line--dragging opacity modifier) */
+.combined-chart__line {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Slope panel reserves 1/3 width, hidden until lens active */
+.combined-chart__slope {
+  flex: 0 0 33.333%;
+  min-width: 0;
+  display: none;
+}
+
+/* Reveal slope panel when a lens is active on the combined chart */
+.combined-chart--lens-active .combined-chart__slope {
+  display: block;
+}
+
+/* Toggle row above the slope chart SVG, centered */
+.combined-chart__slope-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+/* SVG fills the 1/3 slope panel container */
+.slope-chart__svg {
+  width: 100%;
+}
+
+/* Parallel axis vertical lines */
+.slope-chart__axis-line {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+/* Boundary-year labels below each vertical axis */
+.slope-chart__year-label {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--text-muted);
+}
+
+/* Connector lines between the two axes; stroke color set inline per source */
+.slope-chart__source-line {
+  fill: none;
+}
+
+/* Source name labels beside the right axis */
+.slope-chart__label {
+  font-size: 10px;
+}
+
+/* Floating value scale chrome */
+.slope-chart .y-scale path,
+.slope-chart .y-scale line {
+  stroke: var(--border);
+}
+
+.slope-chart .y-scale text {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Rotated unit label beside the floating scale */
+.slope-chart__scale-title {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+/* Phase 4: staged lens icons + placed lens bands */
+
+.lens-stage-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Each stage occupies one row: [icon] [remove button] */
+.lens-stage-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lens-stage-panel__remove {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.lens-stage-panel__remove:hover {
+  opacity: 0.75;
+}
+
+.lens-stage-panel__remove--stage-1 { color: var(--stage-1-color); }
+.lens-stage-panel__remove--stage-2 { color: var(--stage-2-color); }
+.lens-stage-panel__remove--stage-3 { color: var(--stage-3-color); }
+
+.lens-stage-panel__remove--hidden {
+  display: none;
+}
+
+/* Sidebar drag handle for a staged lens — mirrors .lens-panel__lens-icon sizing */
+.lens-stage-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.lens-stage-icon:hover {
+  opacity: 0.85;
+}
+
+.lens-stage-icon:active {
+  cursor: grabbing;
+}
+
+.lens-stage-icon--stage-1 {
+  color: var(--stage-1-color);
+  border-color: var(--stage-1-color);
+}
+
+.lens-stage-icon--stage-2 {
+  color: var(--stage-2-color);
+  border-color: var(--stage-2-color);
+}
+
+.lens-stage-icon--stage-3 {
+  color: var(--stage-3-color);
+  border-color: var(--stage-3-color);
+}
+
+/* Hidden stages disappear entirely — never greyed/disabled (Success Criterion 2) */
+.lens-stage-icon--hidden {
+  display: none;
+}
+
+/* Draggable band on the line chart — fill/stroke set inline by JS per stage */
+.placed-lens__rect {
+  cursor: grab;
+  stroke-width: 1;
+}
+
+.placed-lens__rect:active {
+  cursor: grabbing;
+}
+
+.placed-lens__label {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.placed-lens__remove {
+  user-select: none;
+  pointer-events: all;
+}
+
+.placed-lens__remove:hover {
+  opacity: 0.7;
+}
+
+/* Dashed bridge between end of one lens slope and start of the next */
+.slope-chart__connector {
+  fill: none;
+}
+
+/* ─── Crosshair overlay ──────────────────────────────────────────────────── */
+
+.crosshair__vline {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+/* Floating value tooltip — fixed to viewport, follows cursor */
+.crosshair-tooltip {
+  position: fixed;
+  z-index: 25;
+  min-width: 120px;
+  max-width: 260px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.08s ease;
+}
+
+.crosshair-tooltip--hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.crosshair-tooltip__year {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  margin-bottom: 3px;
+}
+
+.crosshair-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.crosshair-tooltip__swatch {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.crosshair-tooltip__label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crosshair-tooltip__value {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }

@@ -6,11 +6,11 @@ export class InfoTip {
   readonly icon: HTMLButtonElement;
   private readonly bubble: HTMLDivElement;
 
-  constructor(parent: HTMLElement, text: string) {
+  constructor(parent: HTMLElement, text: string, ariaLabel = 'How to use the lens') {
     this.icon = document.createElement('button');
     this.icon.type = 'button';
     this.icon.className = 'info-tip';
-    this.icon.setAttribute('aria-label', 'How to use the lens');
+    this.icon.setAttribute('aria-label', ariaLabel);
     this.icon.innerHTML = INFO_ICON;
 
     this.bubble = document.createElement('div');

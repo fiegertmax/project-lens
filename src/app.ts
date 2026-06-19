@@ -1,4 +1,4 @@
-import { ChartStack } from './charts/ChartStack';
+import { ChartArea } from './charts/ChartArea';
 import { PieChart } from './charts/PieChart';
 import { PieLensManager } from './charts/PieLensManager';
 import { SankeyChart } from './charts/SankeyChart';
@@ -6,21 +6,21 @@ import {
   DATA_URL,
   DEFAULT_COUNTRIES,
   DEFAULT_GLOBAL_YEAR,
-  DEFAULT_LENS_EFFECT,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
   EXTRA_COLUMNS,
-  LENS_WIDTH,
 } from './config';
 import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
-import { LensState } from './state/LensState';
+import { CountryLensState } from './state/CountryLensState';
 import { PieLensState } from './state/PieLensState';
 import { ConfigPanel } from './ui/ConfigPanel';
-import { LensPanel } from './ui/LensPanel';
+import { InfoTip } from './ui/InfoTip';
+import { LensStagePanel } from './ui/LensStagePanel';
 import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
+import { ToggleSwitch } from './ui/ToggleSwitch';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
 export class App {
@@ -37,21 +37,17 @@ export class App {
     const bounds = this.clampBounds(dataset.yearExtent());
     const range = this.clampRange(bounds);
     const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
-    const lens = new LensState(
-      DEFAULT_LENS_EFFECT,
-      LENS_WIDTH.default,
-      Math.round((range[0] + range[1]) / 2),
-    );
     const pieLens = new PieLensState();
+    const lensState = new CountryLensState();
 
-    this.render(dataset, state, lens, pieLens, bounds);
+    this.render(dataset, state, pieLens, lensState, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
-    lens: LensState,
     pieLens: PieLensState,
+    lensState: CountryLensState,
     bounds: YearRange,
   ): void {
     this.root.innerHTML = '';
@@ -63,10 +59,11 @@ export class App {
     main.className = 'app__main';
     this.root.append(sidebar, main);
 
+    this.buildLucToggle(sidebar, state);
     new ConfigPanel(sidebar, dataset, state, bounds);
-    const lensPanel = new LensPanel(sidebar, lens);
+    new LensStagePanel(sidebar, lensState);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
-    const charts = new ChartStack(main, dataset, state, lens, DEFAULT_METRIC);
+    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState);
     const sankey = new SankeyChart(main, dataset);
     const pie = new PieChart(main, dataset);
     const pieManager = new PieLensManager({
@@ -86,7 +83,6 @@ export class App {
       charts.node().style.display = isByCountry ? '' : 'none';
       sankey.node().style.display = isGlobalSankey ? '' : 'none';
       pie.node().style.display = isGlobalPie ? '' : 'none';
-      lensPanel.root.style.display = isByCountry ? '' : 'none';
       sankeyLensPanel.root.style.display = isGlobalSankey ? '' : 'none';
       pieLensPanel.root.style.display = isGlobalPie ? '' : 'none';
 
@@ -103,11 +99,35 @@ export class App {
     };
 
     state.subscribe(syncView);
-    lens.subscribe(() => {
-      if (state.activeTab() === 'by-country') charts.update();
-    });
     window.addEventListener('resize', syncView);
     syncView();
+  }
+
+  private buildLucToggle(sidebar: HTMLElement, state: AppState): void {
+    const panel = document.createElement('div');
+    panel.className = 'luc-toggle-panel';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'luc-toggle-panel__label';
+    labelEl.textContent = 'Land use change';
+    panel.appendChild(labelEl);
+
+    const toggle = new ToggleSwitch(panel, true);
+    toggle.set({ checked: true, disabled: false, label: 'Included' });
+
+    new InfoTip(
+      panel,
+      'Land use change (LUC) CO₂ captures emissions from deforestation and land conversion — and can be negative when forests grow back. Excluding it shows all emissions exluding LUC, which often reveals cleaner long-term trends obscured by LUC volatility.',
+      'Land use change explanation',
+    );
+
+    toggle.onChange(() => {
+      const included = toggle.checked();
+      toggle.set({ checked: included, disabled: false, label: included ? 'Included' : 'Excluded' });
+      state.setIncludeLandUseChange(included);
+    });
+
+    sidebar.appendChild(panel);
   }
 
   /** Restrict the slider to years that actually carry data. */
