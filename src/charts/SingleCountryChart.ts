@@ -16,6 +16,7 @@ import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
+import { CrosshairOverlay } from './CrosshairOverlay';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -60,8 +61,8 @@ export class SingleCountryChart {
   private lensState: CountryLensState | null = null;
   private lensSync: LensSync | null = null;
   private lensUnsub: (() => void) | null = null;
-  // Last year range from update(); needed to re-render after lens state changes
   private currentYearRange: [number, number] = [1950, 2022];
+  private readonly crosshair: CrosshairOverlay;
 
   /** Settable by ChartArea after construction; fires on overlay drag events. */
   callbacks?: LineDragCallbacks;
@@ -96,6 +97,7 @@ export class SingleCountryChart {
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
 
     this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
+    this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.single-line-hit');
   }
 
   node(): HTMLDivElement {
@@ -104,6 +106,7 @@ export class SingleCountryChart {
 
   destroy(): void {
     this.lensUnsub?.();
+    this.crosshair.destroy();
     this.slopeChart.destroy();
     this.root.remove();
   }
@@ -138,7 +141,12 @@ export class SingleCountryChart {
     const [yMin, yMax] = computeYDomain(entries);
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
-    // Lens bands first so the line and axes render on top of them
+    this.renderAxes(x, y, innerH);
+    this.renderLine(entries, x, y, innerW, innerH);
+    this.renderDragOverlay(entries, x, y);
+
+    // Lens bands rendered after the drag overlay so the band rect takes pointer-event
+    // priority over the line hit path when the cursor is within the lens area.
     if (this.lensState && this.lensSync) {
       renderLensBands({
         plot: this.plot,
@@ -158,9 +166,12 @@ export class SingleCountryChart {
         },
       });
     }
-    this.renderAxes(x, y, innerH);
-    this.renderLine(entries, x, y, innerW, innerH);
-    this.renderDragOverlay(entries, x, y);
+
+    this.crosshair.setData(x, y, innerH, entries.map((e) => ({
+      label: e.country,
+      color: this.colorFor(e.country),
+      points: e.points,
+    })));
   }
 
   /**

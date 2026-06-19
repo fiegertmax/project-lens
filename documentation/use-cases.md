@@ -29,11 +29,7 @@ As a user, I want to be able to discover trends in CO2-emissions and understand 
 ## UC-03: Research trends in per-capita emissions with respect to the gdp
 
 
-## Other TODOs
-*Current Bug:*
-- remaining bug: lines can't be added to 'new charts' (all charts under the base one) 
-- we should get rid of the combinedchart <> single country chart stuff; both should behave the same
-
-*remaining use cases:*
-- complete phrasing
-- do NOT use thorough planning mdoe; burns tokens too quickly
+## Other Ideas
+- add option to exclude land use change (which is often resposible for large differences in emissions)
+- moving over the line gives additional info
+- grabbing line does not interfere with lens itself

@@ -22,6 +22,7 @@ import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTip } from '../ui/InfoTip';
+import { CrosshairOverlay } from './CrosshairOverlay';
 import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
 import { crossCountryMean } from '../utils/crossCountryMean';
 import type { MeanMode } from '../utils/crossCountryMean';
@@ -65,6 +66,7 @@ export class CombinedChart {
   private readonly weightedToggle: ToggleSwitch;
   private readonly unsub: () => void;
   private useWeightedMean = false;
+  private readonly crosshair: CrosshairOverlay;
 
   /** Externally-supplied country list; overrides state.selectedCountries() in update(). */
   private countries: string[];
@@ -104,6 +106,7 @@ export class CombinedChart {
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+    this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.combined-line-hit');
 
     // Toggle row above the slope chart
     const toggleRow = slopeCell.append('div').attr('class', 'combined-chart__slope-header');
@@ -148,8 +151,8 @@ export class CombinedChart {
   }
 
   destroy(): void {
-    // Clear lens subscription first — prevents leaked subscriber firing into detached DOM (Pitfall 4)
     this.lensUnsub?.();
+    this.crosshair.destroy();
     this.slopeChart.destroy();
     this.unsub();
     this.root.remove();
@@ -194,8 +197,13 @@ export class CombinedChart {
     this.renderAxes(x, y, innerH);
     this.renderLines(entries, x, y, color, innerW, innerH);
     this.renderLegend(countries, color, innerW);
-    // Re-sync bands to the new x scale on every re-render (e.g. after a year-range change)
     this.renderLensBands();
+
+    this.crosshair.setData(x, y, innerH, entries.map((e) => ({
+      label: e.country,
+      color: color(e.country),
+      points: e.points,
+    })));
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
