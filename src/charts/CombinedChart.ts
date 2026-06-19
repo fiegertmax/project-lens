@@ -13,12 +13,17 @@ import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
-import type { CountryLensState } from '../state/CountryLensState';
+import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
 import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
+import { SlopeChart } from './SlopeChart';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
+import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
+import { crossCountryMean } from '../utils/crossCountryMean';
+import type { MeanMode } from '../utils/crossCountryMean';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -52,9 +57,14 @@ export class CombinedChart {
   private readonly state: AppState;
   private readonly metric: MetricDefinition;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
+  private readonly lineCell: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
+  private readonly slopeChart: SlopeChart;
+  private readonly weightedToggle: ToggleSwitch;
   private readonly unsub: () => void;
+  private useWeightedMean = false;
+  private currentYDomain: [number, number] | undefined;
 
   /** Externally-supplied country list; overrides state.selectedCountries() in update(). */
   private countries: string[];
@@ -84,10 +94,28 @@ export class CombinedChart {
     // Initialize from current selection so first paint matches existing behavior
     this.countries = state.selectedCountries();
     this.root = select(parent).append('div').attr('class', 'combined-chart');
-    this.svg = this.root.append('svg').attr('class', 'combined-chart__svg');
+
+    // Flex body: line cell (2/3) + slope cell (1/3) — mirrors SingleCountryChart DOM structure
+    const body = this.root.append('div').attr('class', 'combined-chart__body');
+    this.lineCell = body.append('div').attr('class', 'combined-chart__line');
+    const slopeCell = body.append('div').attr('class', 'combined-chart__slope');
+
+    this.svg = this.lineCell.append('svg').attr('class', 'combined-chart__svg');
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+
+    // Toggle row above the slope chart
+    const toggleRow = slopeCell.append('div').attr('class', 'combined-chart__slope-header');
+    this.weightedToggle = new ToggleSwitch(toggleRow.node()!, true);
+    this.weightedToggle.set({ checked: false, disabled: false, label: 'Simple mean' });
+    this.weightedToggle.onChange(() => {
+      this.useWeightedMean = this.weightedToggle.checked();
+      const lenses = this.lensState?.lensesFor(COMBINED_CHART_KEY) ?? [];
+      if (lenses.length > 0) this.renderSlope(lenses);
+    });
+
+    this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
     this.unsub = state.subscribe(() => this.update());
   }
 
@@ -104,13 +132,14 @@ export class CombinedChart {
     this.lensUnsub?.();
     this.lensState = state;
     this.lensSync = sync;
-    this.lensUnsub = state.subscribe(() => this.renderLensBands());
-    this.renderLensBands();
+    this.lensUnsub = state.subscribe(() => this.renderLenses());
+    this.renderLenses();
   }
 
   destroy(): void {
     // Clear lens subscription first — prevents leaked subscriber firing into detached DOM (Pitfall 4)
     this.lensUnsub?.();
+    this.slopeChart.destroy();
     this.unsub();
     this.root.remove();
   }
@@ -122,7 +151,8 @@ export class CombinedChart {
   }
 
   update(): void {
-    const width = this.root.node()!.clientWidth || 600;
+    // Reading lineCell width so the SVG fills only the 2/3 flex cell (not the full root)
+    const width = this.lineCell.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
 
@@ -143,6 +173,8 @@ export class CombinedChart {
 
     const x = scaleLinear().domain(yearRange).range([0, innerW]);
     const [yMin, yMax] = computeYDomain(entries);
+    // Cache for renderSlope() so slope chart shares the line chart's y-scale (CMEAN-05)
+    this.currentYDomain = [yMin, yMax];
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
     // Prefer shared colorFor to avoid color shifts when countries are extracted
@@ -381,12 +413,43 @@ export class CombinedChart {
       .attr('class', name);
   }
 
+  private renderLenses(): void {
+    if (!this.lensState) return;
+    const lenses = this.lensState.lensesFor(COMBINED_CHART_KEY);
+    const active = lenses.length > 0;
+    this.root.classed('combined-chart--lens-active', active);
+    this.update();
+    if (active) {
+      requestAnimationFrame(() => this.renderSlope(lenses));
+    } else {
+      this.slopeChart.clear();
+    }
+  }
+
+  private renderSlope(lenses: PlacedLens[]): void {
+    const mode: MeanMode = this.useWeightedMean ? 'weighted' : 'simple';
+    const windows: StagedLensWindow[] = lenses.map((l) => ({
+      stage: l.stage,
+      startYear: l.startYear,
+      endYear: l.endYear,
+    }));
+    const aggregated: AggregatedLensWindow[] = crossCountryMean(
+      this.countries,
+      windows,
+      this.dataset,
+      this.state.yearRange(),
+      mode,
+    );
+    this.slopeChart.renderAggregated(aggregated, this.currentYDomain);
+  }
+
   private renderLensBands(): void {
     if (!this.lensState || !this.lensSync) return;
     // Shared renderer clamps band edges to the domain, so no clipPath is needed (Pitfall 3).
     const lenses = this.lensState.lensesFor(COMBINED_CHART_KEY);
     const yr = this.currentYearRange;
-    const width = this.root.node()!.clientWidth || 600;
+    // Use lineCell width so lens bands align with the 2/3-wide SVG, not the full root
+    const width = this.lineCell.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
     const x = scaleLinear().domain(yr).range([0, innerW]);
@@ -400,7 +463,7 @@ export class CombinedChart {
       key: COMBINED_CHART_KEY,
       lensState: this.lensState,
       lensSync: this.lensSync,
-      getContainerWidth: () => this.root.node()!.clientWidth || 600,
+      getContainerWidth: () => this.lineCell.node()!.clientWidth || 600,
       onChange: () => this.update(),
     });
   }
