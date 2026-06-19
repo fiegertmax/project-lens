@@ -13,8 +13,12 @@ import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
+import type { CountryLensState } from '../state/CountryLensState';
+import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
+import type { LensSync } from './LensSync';
+import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -55,6 +59,13 @@ export class CombinedChart {
   /** Externally-supplied country list; overrides state.selectedCountries() in update(). */
   private countries: string[];
 
+  // Lens state — mirrors SingleCountryChart lines 60-64
+  private lensState: CountryLensState | null = null;
+  private lensSync: LensSync | null = null;
+  private lensUnsub: (() => void) | null = null;
+  // Last year range from update(); needed to re-render after lens state changes
+  private currentYearRange: [number, number] = [1950, 2022];
+
   /** Optional shared color function from ChartArea; prevents color shifts on extraction. */
   colorFor?: (c: string) => string;
 
@@ -84,7 +95,22 @@ export class CombinedChart {
     return this.root.node()!;
   }
 
+  /**
+   * Wires this chart to CountryLensState + LensSync. Mirrors SingleCountryChart.setLensState.
+   * Re-subscribing clears the prior handle per Pitfall 4: prevents a leaked subscriber
+   * firing into a detached DOM.
+   */
+  setLensState(state: CountryLensState, sync: LensSync): void {
+    this.lensUnsub?.();
+    this.lensState = state;
+    this.lensSync = sync;
+    this.lensUnsub = state.subscribe(() => this.renderLensBands());
+    this.renderLensBands();
+  }
+
   destroy(): void {
+    // Clear lens subscription first — prevents leaked subscriber firing into detached DOM (Pitfall 4)
+    this.lensUnsub?.();
     this.unsub();
     this.root.remove();
   }
@@ -347,5 +373,14 @@ export class CombinedChart {
       .data([null])
       .join('g')
       .attr('class', name);
+  }
+
+  // Stub body references all new fields/imports so TS does not flag them as unused.
+  // Task 2 replaces this with the real implementation.
+  private renderLensBands(): void {
+    if (!this.lensState || !this.lensSync) return;
+    void (this.currentYearRange);
+    void (COMBINED_CHART_KEY);
+    void (renderLensBandsHelper);
   }
 }
