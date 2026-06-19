@@ -1,5 +1,8 @@
 import { LENS_STAGE_WIDTH } from '../config';
 
+// '__' prefix is not a valid OWID entity name, so no collision with real country keys (CLENS-03).
+export const COMBINED_CHART_KEY = '__combined__';
+
 export type LensStage = 1 | 2 | 3;
 
 export interface PlacedLens {
