@@ -129,6 +129,10 @@ export class CombinedChart {
     this.svg.attr('width', width).attr('height', HEIGHT);
 
     const yearRange = this.state.yearRange();
+    // Store year range for renderLensBands() to use after lens state changes
+    this.currentYearRange = yearRange;
+    // Write placement-window attributes so LensStagePanel.placementWindow() reads the live slider range (Pitfall 2)
+    this.root.attr('data-year-start', yearRange[0]).attr('data-year-end', yearRange[1]);
     // Use externally-supplied list; ChartArea overrides via updateCountries()
     const countries = this.countries;
 
@@ -149,6 +153,8 @@ export class CombinedChart {
     this.renderAxes(x, y, innerH);
     this.renderLines(entries, x, y, color, innerW, innerH);
     this.renderLegend(countries, color, innerW);
+    // Re-sync bands to the new x scale on every re-render (e.g. after a year-range change)
+    this.renderLensBands();
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
@@ -375,12 +381,27 @@ export class CombinedChart {
       .attr('class', name);
   }
 
-  // Stub body references all new fields/imports so TS does not flag them as unused.
-  // Task 2 replaces this with the real implementation.
   private renderLensBands(): void {
     if (!this.lensState || !this.lensSync) return;
-    void (this.currentYearRange);
-    void (COMBINED_CHART_KEY);
-    void (renderLensBandsHelper);
+    // Shared renderer clamps band edges to the domain, so no clipPath is needed (Pitfall 3).
+    const lenses = this.lensState.lensesFor(COMBINED_CHART_KEY);
+    const yr = this.currentYearRange;
+    const width = this.root.node()!.clientWidth || 600;
+    const innerW = width - MARGIN.left - MARGIN.right;
+    const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
+    const x = scaleLinear().domain(yr).range([0, innerW]);
+    renderLensBandsHelper({
+      plot: this.plot,
+      lenses,
+      x,
+      yearRange: yr,
+      innerW,
+      innerH,
+      key: COMBINED_CHART_KEY,
+      lensState: this.lensState,
+      lensSync: this.lensSync,
+      getContainerWidth: () => this.root.node()!.clientWidth || 600,
+      onChange: () => this.update(),
+    });
   }
 }
