@@ -1,5 +1,6 @@
 import { LENS_STAGE_WIDTH } from '../config';
 import type { CountryLensState, LensStage } from '../state/CountryLensState';
+import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
 import { LENS_ICON } from './icons';
 import { createLensDragSweeper } from './lens-drag-sweeper';
@@ -7,11 +8,14 @@ import { createLensDragSweeper } from './lens-drag-sweeper';
 /** The three stage numbers in display order. */
 const STAGES: readonly LensStage[] = [1, 2, 3];
 
-/** Single-country chart element under a viewport point, or null.
- *  Only matches `.single-country-chart[data-country]` — the combined chart is excluded (LENS-01). */
-function singleCountryChartAt(x: number, y: number): HTMLElement | null {
+/** Returns the lens drop target under (x, y): a single-country chart OR the combined chart. */
+function lensDropTargetAt(x: number, y: number): HTMLElement | null {
   const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  return el?.closest<HTMLElement>('.single-country-chart[data-country]') ?? null;
+  return (
+    el?.closest<HTMLElement>('.single-country-chart[data-country]') ??
+    el?.closest<HTMLElement>('.combined-chart') ??
+    null
+  );
 }
 
 /** Sidebar panel: three progressively-revealed stage icons with paired remove buttons,
@@ -67,10 +71,14 @@ export class LensStagePanel {
 
   private wireDrag(btn: HTMLButtonElement, stage: LensStage): void {
     createLensDragSweeper<HTMLElement>(btn, {
-      resolveTarget: (x, y) => singleCountryChartAt(x, y),
+      resolveTarget: (x, y) => lensDropTargetAt(x, y),
       onHover: (target, previous) => {
-        previous?.classList.remove('single-country-chart--drop');
-        target?.classList.add('single-country-chart--drop');
+        previous?.classList.remove('single-country-chart--drop', 'combined-chart--drop');
+        target?.classList.add(
+          target.classList.contains('combined-chart')
+            ? 'combined-chart--drop'
+            : 'single-country-chart--drop',
+        );
       },
       // Place on each chart swept over while Shift is held
       onSweep: (target) => this.placeOn(target, stage, true),
@@ -79,11 +87,10 @@ export class LensStagePanel {
   }
 
   private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean): void {
-    const country = chartEl?.dataset.country;
-    if (!country) return;
-
+    if (!chartEl) return;
+    const key = chartEl.dataset.country ?? COMBINED_CHART_KEY;
     const { startYear, endYear } = this.placementWindow(chartEl);
-    this.state.placeLens(country, { stage, startYear, endYear, linked: shift });
+    this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
   }
 
   /** Derives a placement window centered in the chart's visible year domain.
