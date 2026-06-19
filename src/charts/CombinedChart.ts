@@ -16,6 +16,7 @@ import type { AppState } from '../state/AppState';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
 import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { resolveSeries } from '../utils/interpolation';
+import { metricSpec, extraColumnFor } from '../utils/metricSpec';
 import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
@@ -57,7 +58,6 @@ function computeYDomain(entries: SeriesEntry[]): [number, number] {
 export class CombinedChart {
   private readonly dataset: EmissionsDataset;
   private readonly state: AppState;
-  private readonly metric: MetricDefinition;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly lineCell: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
@@ -92,7 +92,8 @@ export class CombinedChart {
   ) {
     this.dataset = dataset;
     this.state = state;
-    this.metric = metric;
+    // metric parameter retained for API compatibility; axis labels now derived via metricSpec()
+    void metric;
     // Initialize from current selection so first paint matches existing behavior
     this.countries = state.selectedCountries();
     this.root = select(parent).append('div').attr('class', 'combined-chart');
@@ -126,7 +127,7 @@ export class CombinedChart {
         label: this.useWeightedMean ? 'Weighted mean' : 'Simple mean',
       });
       const lenses = this.lensState?.lensesFor(COMBINED_CHART_KEY) ?? [];
-      if (lenses.length > 0) this.renderSlope(lenses);
+      if (lenses.length > 0 && this.state.metricMode() !== 'per-capita') this.renderSlope(lenses);
     });
 
     this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
@@ -181,7 +182,8 @@ export class CombinedChart {
     const countries = this.countries;
 
     const includeLUC = this.state.includeLandUseChange();
-    const extraColumn = includeLUC ? undefined : 'co2';
+    const metricMode = this.state.metricMode();
+    const extraColumn = extraColumnFor(metricMode, includeLUC);
     const entries: SeriesEntry[] = countries.map((country) => {
       const series = this.dataset.series(country);
       return { country, points: series ? resolveSeries(series, yearRange, extraColumn) : [] };
@@ -196,7 +198,8 @@ export class CombinedChart {
       ? this.colorFor
       : (c: string) => scaleOrdinal(countries, schemeTableau10 as readonly string[])(c);
 
-    this.renderAxes(x, y, innerH, includeLUC);
+    const spec = metricSpec(metricMode, includeLUC);
+    this.renderAxes(x, y, innerH, spec);
     this.renderLines(entries, x, y, color, innerW, innerH);
     this.renderLegend(countries, color, innerW);
     this.renderLensBands();
@@ -205,18 +208,17 @@ export class CombinedChart {
       label: e.country,
       color: color(e.country),
       points: e.points,
-    })));
+    })), spec.valueLabel);
   }
 
-  private renderAxes(x: LinearScale, y: LinearScale, innerH: number, includeLUC: boolean): void {
+  private renderAxes(x: LinearScale, y: LinearScale, innerH: number, spec: { label: string; unit: string }): void {
     this.group('x-axis')
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
     this.group('y-axis').call(axisLeft(y).ticks(5));
-    const metricLabel = includeLUC ? this.metric.label : 'Annual CO₂ (excl. LUC)';
     this.group('y-title')
       .selectAll<SVGTextElement, string>('text')
-      .data([`${metricLabel} (${this.metric.unit})`])
+      .data([`${spec.label} (${spec.unit})`])
       .join('text')
       .attr('class', 'combined-chart__y-title')
       .attr('transform', `translate(${-MARGIN.left + 14},${innerH / 2}) rotate(-90)`)
@@ -439,7 +441,8 @@ export class CombinedChart {
     const active = lenses.length > 0;
     this.root.classed('combined-chart--lens-active', active);
     this.update();
-    if (active) {
+    const perCapita = this.state.metricMode() === 'per-capita';
+    if (active && !perCapita) {
       requestAnimationFrame(() => this.renderSlope(lenses));
     } else {
       this.slopeChart.clear();
