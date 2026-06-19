@@ -40,6 +40,7 @@ export class CrosshairOverlay {
   private y: ScaleLinear<number, number> | null = null;
   private innerH = 0;
   private entries: CrosshairEntry[] = [];
+  private valueLabel: (v: number) => string = VALUE_FMT;
 
   constructor(
     svg: Selection<SVGSVGElement, unknown, null, undefined>,
@@ -86,11 +87,13 @@ export class CrosshairOverlay {
     y: ScaleLinear<number, number>,
     innerH: number,
     entries: CrosshairEntry[],
+    valueLabel?: (v: number) => string,
   ): void {
     this.x = x;
     this.y = y;
     this.innerH = innerH;
     this.entries = entries;
+    this.valueLabel = valueLabel ?? VALUE_FMT;
   }
 
   /** Remove the body-level tooltip div (call from chart.destroy()). */
@@ -165,7 +168,7 @@ export class CrosshairOverlay {
 
       const val = document.createElement('span');
       val.className = 'crosshair-tooltip__value';
-      val.textContent = VALUE_FMT(e.v);
+      val.textContent = this.valueLabel(e.v);
 
       row.append(swatch, name, val);
       this.tooltip.appendChild(row);
