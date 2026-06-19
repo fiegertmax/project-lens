@@ -64,6 +64,9 @@ export class ChartArea {
     this.combinedChart = new CombinedChart(this.rowContainer, dataset, state, metric);
     // Combined chart root participates in drop detection as a chart-area__row
     this.combinedChart.node().classList.add('chart-area__row');
+    // Wire lens state into the combined chart ONCE — it persists for the app lifetime
+    // (single-country rows are re-wired per reconcile, but the combined chart is never destroyed). CLENS-01..04
+    this.combinedChart.setLensState(this.lensState, this.lensSync);
 
     this.dropSpacer = document.createElement('div');
     this.dropSpacer.className = 'chart-area__drop-spacer';
@@ -135,7 +138,7 @@ export class ChartArea {
     // Wire callbacks into combined chart
     this.combinedChart.callbacks = callbacks;
 
-    // (5) Create rows for newly extracted countries; wire lens state/sync (LENS-01: single-country only)
+    // (5) Create rows for newly extracted countries; wire lens state/sync into each
     for (const country of this.extractedCountries) {
       if (!this.rows.has(country)) {
         const chart = new SingleCountryChart(
