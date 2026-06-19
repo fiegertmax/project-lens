@@ -11,10 +11,10 @@ import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
-import { LENS_STAGE_WIDTH, STAGE_COLORS } from '../config';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
+import { renderLensBands } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
@@ -139,7 +139,25 @@ export class SingleCountryChart {
     const y = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
 
     // Lens bands first so the line and axes render on top of them
-    this.renderPlacedLensBands(x, yearRange, innerW, innerH);
+    if (this.lensState && this.lensSync) {
+      renderLensBands({
+        plot: this.plot,
+        lenses: this.lensState.lensesFor(this.country),
+        x,
+        yearRange,
+        innerW,
+        innerH,
+        key: this.country,
+        lensState: this.lensState,
+        lensSync: this.lensSync,
+        getContainerWidth: () => this.lineCell.node()!.clientWidth || 600,
+        onChange: () => {
+          const ls = this.lensState?.lensesFor(this.country) ?? [];
+          if (ls.length > 0) requestAnimationFrame(() => this.renderSlope(ls));
+          this.update(this.currentYearRange);
+        },
+      });
+    }
     this.renderAxes(x, y, innerH);
     this.renderLine(entries, x, y, innerW, innerH);
     this.renderDragOverlay(entries, x, y);
@@ -169,144 +187,6 @@ export class SingleCountryChart {
       this.country,
       lenses.map((l) => ({ stage: l.stage, startYear: l.startYear, endYear: l.endYear })),
     );
-  }
-
-  /**
-   * Draws one rect.placed-lens__rect per PlacedLens, stage-colored (LENS-02).
-   * Attaches x-drag via moveLinkedLens (LENSUI-01 + LENSUI-04) and
-   * Ctrl/Cmd+wheel resize via resizeLinkedLens (LENSUI-02).
-   */
-  private renderPlacedLensBands(
-    x: LinearScale,
-    yearRange: [number, number],
-    innerW: number,
-    innerH: number,
-  ): void {
-    const bandGroup = this.group('lens-band');
-
-    const lenses = this.lensState?.lensesFor(this.country) ?? [];
-    if (lenses.length === 0) {
-      bandGroup.selectAll('*').remove();
-      return;
-    }
-
-    const yearsPerPixel = (yearRange[1] - yearRange[0]) / innerW;
-
-    // One rect per placed lens, keyed by id
-    bandGroup
-      .selectAll<SVGRectElement, PlacedLens>('rect.placed-lens__rect')
-      .data(lenses, (d) => d.id)
-      .join('rect')
-      .attr('class', 'placed-lens__rect')
-      .attr('x', (d) => x(Math.max(yearRange[0], d.startYear)))
-      .attr('y', 0)
-      .attr('width', (d) => {
-        const bx = x(Math.max(yearRange[0], d.startYear));
-        const ex = x(Math.min(yearRange[1], d.endYear));
-        return Math.max(0, ex - bx);
-      })
-      .attr('height', innerH)
-      .attr('fill', (d) => STAGE_COLORS[d.stage])
-      .attr('fill-opacity', 0.18)
-      .attr('stroke', (d) => STAGE_COLORS[d.stage])
-      .attr('stroke-width', 1.5)
-      .attr('cursor', 'ew-resize')
-      .call(this.makeLensDrag(yearsPerPixel))
-      .on('wheel.lens', (ev: WheelEvent, d) => this.handleLensWheel(ev, d));
-
-    // Year labels at band edges
-    const labelData = lenses.flatMap((d) => [
-      { x: x(Math.max(yearRange[0], d.startYear)), year: d.startYear, anchor: 'start' as const },
-      { x: x(Math.min(yearRange[1], d.endYear)), year: d.endYear, anchor: 'end' as const },
-    ]);
-
-    bandGroup
-      .selectAll<SVGTextElement, (typeof labelData)[number]>('text.placed-lens__label')
-      .data(labelData, (d) => `${d.year}-${d.anchor}`)
-      .join('text')
-      .attr('class', 'placed-lens__label')
-      .attr('x', (d) => d.x)
-      .attr('y', -3)
-      .attr('text-anchor', (d) => d.anchor)
-      .text((d) => String(d.year));
-
-    // Remove button: × at the top-right of each band
-    bandGroup
-      .selectAll<SVGTextElement, PlacedLens>('text.placed-lens__remove')
-      .data(lenses, (d) => d.id)
-      .join('text')
-      .attr('class', 'placed-lens__remove')
-      .attr('x', (d) => x(Math.min(yearRange[1], d.endYear)) - 3)
-      .attr('y', 14)
-      .attr('text-anchor', 'end')
-      .attr('font-size', '13px')
-      .attr('fill', (d) => STAGE_COLORS[d.stage])
-      .attr('cursor', 'pointer')
-      .text('×')
-      .on('click', (ev, d) => {
-        ev.stopPropagation();
-        this.lensState?.removeLens(this.country, d.id);
-      });
-  }
-
-  /**
-   * Returns a d3 drag behaviour that moves the dragged lens via LensSync.
-   * Live position update happens on 'drag'; slope re-renders on 'end' only (ROADMAP).
-   */
-  private makeLensDrag(yearsPerPixel: number) {
-    return drag<SVGRectElement, PlacedLens>()
-      .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
-        if (!this.lensSync) return;
-        const delta = ev.dx * yearsPerPixel;
-        this.lensSync.moveLinkedLens(this.country, d.id, delta);
-        // Update band position live for immediate visual feedback
-        const updatedLenses = this.lensState?.lensesFor(this.country) ?? [];
-        const updated = updatedLenses.find((l) => l.id === d.id);
-        if (updated) {
-          const rect = select(ev.sourceEvent.target as SVGRectElement);
-          const yr = this.currentYearRange;
-          const w = this.lineCell.node()!.clientWidth || 600;
-          const iW = w - MARGIN.left - MARGIN.right;
-          const xScale = scaleLinear().domain(yr).range([0, iW]);
-          rect
-            .attr('x', xScale(Math.max(yr[0], updated.startYear)))
-            .attr('width', Math.max(0, xScale(Math.min(yr[1], updated.endYear)) - xScale(Math.max(yr[0], updated.startYear))));
-        }
-      })
-      .on('end', () => {
-        // Re-render slope after drag ends (ROADMAP: slope update on drag-end only)
-        const currentLenses = this.lensState?.lensesFor(this.country) ?? [];
-        if (currentLenses.length > 0) {
-          requestAnimationFrame(() => this.renderSlope(currentLenses));
-        }
-        // Full band re-render to sync labels and any linked lens positions
-        this.update(this.currentYearRange);
-      });
-  }
-
-  /**
-   * Handles Ctrl/Cmd+wheel over a lens band: resizes the lens via LensSync (LENSUI-02).
-   * Normal scroll is untouched (T-04-06 threat mitigated).
-   */
-  private handleLensWheel(ev: WheelEvent, lens: PlacedLens): void {
-    if (!ev.ctrlKey && !ev.metaKey) return;
-    ev.preventDefault();
-    if (!this.lensSync) return;
-
-    const currentSpan = lens.endYear - lens.startYear;
-    // deltaY > 0 = scroll down = shrink; < 0 = scroll up = grow
-    const step = ev.deltaY > 0 ? -1 : 1;
-    const newSpan = Math.min(
-      LENS_STAGE_WIDTH.max,
-      Math.max(LENS_STAGE_WIDTH.min, currentSpan + step),
-    );
-    this.lensSync.resizeLinkedLens(this.country, lens.id, newSpan);
-    // Re-render bands and slope after resize
-    this.update(this.currentYearRange);
-    const updatedLenses = this.lensState?.lensesFor(this.country) ?? [];
-    if (updatedLenses.length > 0) {
-      requestAnimationFrame(() => this.renderSlope(updatedLenses));
-    }
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
