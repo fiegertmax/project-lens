@@ -4,7 +4,7 @@ import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { STAGE_COLORS } from '../config';
 import { getSourceValue } from '../utils/getSourceValue';
 import { EMISSION_SOURCES } from './slope-types';
-import type { StagedLensWindow } from './slope-types';
+import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
 
 // Matches the line chart height; right margin reserves space for source labels + scale
 const MARGIN = { top: 20, right: 110, bottom: 28, left: 10 };
@@ -86,6 +86,55 @@ export class SlopeChart {
 
     // Use the caller-supplied domain (line chart's y-axis) when available so source slopes
     // are readable at the same scale as the main chart. Fall back to auto-fit from source values.
+    let domainMin: number;
+    let domainMax: number;
+    if (yDomain) {
+      [domainMin, domainMax] = yDomain;
+    } else {
+      const allValues = allEntries.flat().flatMap((s) =>
+        [s.leftValue, s.rightValue].filter((v): v is number => v !== undefined),
+      );
+      domainMin = allValues.length ? Math.min(0, Math.min(...allValues)) : 0;
+      domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
+    }
+    const y: LinearScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
+
+    this.renderAxes(columns, lenses, innerH);
+    this.renderAllLines(lenses, allEntries, columns, y);
+    this.renderAllLabels(allEntries, columns, y, innerW);
+    this.renderScale(y, innerW, innerH);
+  }
+
+  /**
+   * Render path for pre-computed cross-country means. A separate method is needed because
+   * values cannot be looked up from a single country — they are already aggregated by the
+   * caller (crossCountryMean). Reuses all existing render helpers unchanged.
+   */
+  renderAggregated(lenses: AggregatedLensWindow[], yDomain?: [number, number]): void {
+    if (lenses.length === 0) {
+      this.clear();
+      return;
+    }
+
+    const width = this.root.node()!.clientWidth || 300;
+    const innerW = width - MARGIN.left - MARGIN.right;
+    const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
+
+    this.svg.attr('width', width).attr('height', HEIGHT);
+
+    const columns = this.columnPositions(lenses, innerW);
+
+    // Build SourceEntry[][] from pre-computed values instead of per-country getSourceValue calls.
+    const allEntries: SourceEntry[][] = lenses.map((lens) =>
+      EMISSION_SOURCES.map((src) => ({
+        key: `${lens.stage}-${src.key}`,
+        label: src.label,
+        color: src.color,
+        leftValue: lens.values.get(src.key)?.left,
+        rightValue: lens.values.get(src.key)?.right,
+      })),
+    );
+
     let domainMin: number;
     let domainMax: number;
     if (yDomain) {
