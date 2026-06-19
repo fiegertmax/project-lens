@@ -13,6 +13,15 @@ export interface StagedLensWindow extends LensWindow {
 }
 
 /**
+ * Pre-computed per-source mean values for the combined-chart slope panel.
+ * Values cannot be looked up from a single country; the aggregator pre-computes
+ * the cross-country mean for each source at each boundary year (CMEAN-02..04).
+ */
+export interface AggregatedLensWindow extends StagedLensWindow {
+  values: Map<string, { left: number | undefined; right: number | undefined }>;
+}
+
+/**
  * Derives the ordered column positions for a slope chart from N lens windows.
  * Each lens contributes its startYear and endYear; shared boundaries are kept
  * duplicated so consecutive lens segments meet at the same column (SLOPE-05).
