@@ -215,7 +215,7 @@ export class CombinedChart {
     this.group('x-axis')
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
-    this.group('y-axis').call(axisLeft(y).ticks(5));
+    this.group('y-axis').transition().duration(400).call(axisLeft(y).ticks(5));
     this.group('y-title')
       .selectAll<SVGTextElement, string>('text')
       .data([`${spec.label} (${spec.unit})`])

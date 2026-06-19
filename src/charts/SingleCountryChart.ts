@@ -210,7 +210,7 @@ export class SingleCountryChart {
     this.group('x-axis')
       .attr('transform', `translate(0,${innerH})`)
       .call(axisBottom(x).ticks(8).tickFormat((d) => YEAR_FORMAT(Number(d))));
-    this.group('y-axis').call(axisLeft(y).ticks(5));
+    this.group('y-axis').transition().duration(400).call(axisLeft(y).ticks(5));
     const metricLabel = this.includeLUC ? this.metric.label : 'Annual CO₂ (excl. LUC)';
     this.group('y-title')
       .selectAll<SVGTextElement, string>('text')
