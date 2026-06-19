@@ -649,6 +649,13 @@ body.lens-dragging {
   border-radius: 6px;
 }
 
+/* Lens-drop highlight for the combined chart — mirrors the single-country drop ring. */
+.combined-chart--drop {
+  outline: 2px dashed var(--lens-border);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 .lens-panel__button {
   padding: 6px 12px;
   border: 1px solid var(--border);
