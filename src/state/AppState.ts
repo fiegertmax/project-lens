@@ -6,6 +6,9 @@ export type BaseVisualizationTab = 'by-country' | 'global';
 /** Which sub-visualization is shown inside the "global" tab. */
 export type GlobalVizMode = 'sankey' | 'pie';
 
+/** Whether the primary line charts show absolute or per-capita emissions. */
+export type MetricMode = 'absolute' | 'per-capita';
+
 type Listener = () => void;
 
 /** Observable single source of truth for the view configuration. */
@@ -17,6 +20,7 @@ export class AppState {
   private focusContinent: string | null = null;
   private vizMode: GlobalVizMode = 'sankey';
   private lucEnabled = true;
+  private metric: MetricMode = 'absolute';
   private readonly listeners = new Set<Listener>();
 
   constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {
@@ -96,6 +100,16 @@ export class AppState {
   setIncludeLandUseChange(val: boolean): void {
     if (val === this.lucEnabled) return;
     this.lucEnabled = val;
+    this.notify();
+  }
+
+  metricMode(): MetricMode {
+    return this.metric;
+  }
+
+  setMetricMode(mode: MetricMode): void {
+    if (mode === this.metric) return;
+    this.metric = mode;
     this.notify();
   }
 
