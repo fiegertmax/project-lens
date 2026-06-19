@@ -111,6 +111,12 @@ export class CombinedChart {
     this.weightedToggle.set({ checked: false, disabled: false, label: 'Simple mean' });
     this.weightedToggle.onChange(() => {
       this.useWeightedMean = this.weightedToggle.checked();
+      // Update label to reflect current mode (CMEAN-03)
+      this.weightedToggle.set({
+        checked: this.useWeightedMean,
+        disabled: false,
+        label: this.useWeightedMean ? 'Weighted mean' : 'Simple mean',
+      });
       const lenses = this.lensState?.lensesFor(COMBINED_CHART_KEY) ?? [];
       if (lenses.length > 0) this.renderSlope(lenses);
     });
