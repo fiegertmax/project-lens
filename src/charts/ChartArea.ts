@@ -147,6 +147,7 @@ export class ChartArea {
           this.dataset,
           this.metric,
           this.colorFor,
+          this.state,
         );
         chart.callbacks = callbacks;
         chart.setLensState(this.lensState, this.lensSync);
