@@ -1228,6 +1228,52 @@ body.line-dragging {
   font-size: 10px;
 }
 
+/* Phase 11: GDP slope panel (per-capita mode) */
+
+.gdp-slope-chart__svg {
+  width: 100%;
+}
+
+.gdp-slope-chart__axis-line {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.gdp-slope-chart__year-label {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--text-muted);
+}
+
+.gdp-slope-chart__metric-line {
+  fill: none;
+}
+
+.gdp-slope-chart__label {
+  font-size: 10px;
+}
+
+.gdp-slope-chart__value-label {
+  font-size: 9px;
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gdp-slope-chart .gdp-slope-chart__y-axis path,
+.gdp-slope-chart .gdp-slope-chart__y-axis line {
+  stroke: var(--border);
+}
+
+.gdp-slope-chart .gdp-slope-chart__y-axis text {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+.gdp-slope-chart__empty {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
 /* Phase 4: staged lens icons + placed lens bands */
 
 .lens-stage-panel__list {
