@@ -38,6 +38,8 @@ export const EXTRA_COLUMNS: readonly string[] = [
   'co2',
   'co2_per_capita',
   'co2_including_luc_per_capita',
+  'gdp',
+  'population',
   'co2_growth_abs',
   'co2_growth_prct',
   'coal_co2',
