@@ -11,11 +11,13 @@ import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint, MetricDefinition } from '../data/types';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
+import type { AppState } from '../state/AppState';
 import { resolveSeries } from '../utils/interpolation';
 import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
+import { GdpSlopeChart } from './GdpSlopeChart';
 import { CrosshairOverlay } from './CrosshairOverlay';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
@@ -54,7 +56,9 @@ export class SingleCountryChart {
   private readonly lineCell: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
+  private readonly state: AppState;
   private readonly slopeChart: SlopeChart;
+  private readonly gdpSlopeChart: GdpSlopeChart;
   private overlayPath: Selection<SVGPathElement, SeriesEntry, SVGGElement, unknown> | null = null;
   private dragBound = false;
 
@@ -74,11 +78,13 @@ export class SingleCountryChart {
     dataset: EmissionsDataset,
     metric: MetricDefinition,
     colorFor: (c: string) => string,
+    state: AppState,
   ) {
     this.country = country;
     this.dataset = dataset;
     this.metric = metric;
     this.colorFor = colorFor;
+    this.state = state;
 
     this.root = select(parent)
       .append('div')
@@ -98,6 +104,7 @@ export class SingleCountryChart {
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
 
     this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
+    this.gdpSlopeChart = new GdpSlopeChart(slopeCell.node()!, dataset);
     this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.single-line-hit');
   }
 
@@ -109,6 +116,7 @@ export class SingleCountryChart {
     this.lensUnsub?.();
     this.crosshair.destroy();
     this.slopeChart.destroy();
+    this.gdpSlopeChart.destroy();
     this.root.remove();
   }
 
@@ -193,17 +201,26 @@ export class SingleCountryChart {
       requestAnimationFrame(() => this.renderSlope(lenses));
     } else {
       this.slopeChart.clear();
+      this.gdpSlopeChart.clear();
     }
   }
 
   private renderSlope(lenses: PlacedLens[]): void {
-    const excludeSources = this.includeLUC ? undefined : new Set(['land_use_change_co2']);
-    this.slopeChart.render(
-      this.country,
-      lenses.map((l) => ({ stage: l.stage, startYear: l.startYear, endYear: l.endYear })),
-      undefined,
-      excludeSources,
-    );
+    if (this.state.metricMode() === 'per-capita') {
+      // Clear the absolute panel first so no stale source lines linger on mode switch.
+      this.slopeChart.clear();
+      this.gdpSlopeChart.render(this.country, lenses);
+    } else {
+      // Clear the GDP panel first so no stale normalized lines linger on mode switch.
+      this.gdpSlopeChart.clear();
+      const excludeSources = this.includeLUC ? undefined : new Set(['land_use_change_co2']);
+      this.slopeChart.render(
+        this.country,
+        lenses.map((l) => ({ stage: l.stage, startYear: l.startYear, endYear: l.endYear })),
+        undefined,
+        excludeSources,
+      );
+    }
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number): void {
