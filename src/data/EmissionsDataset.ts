@@ -1,6 +1,7 @@
 import { csv } from 'd3';
 import type { DSVRowString } from 'd3';
 import type { CountrySeries, MetricDefinition } from './types';
+import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 
 /** Loads and indexes the OWID CO₂ dataset for a single metric. */
 export class EmissionsDataset {
@@ -47,6 +48,36 @@ export class EmissionsDataset {
   valueInYear(entity: string, year: number): number | undefined {
     const point = this.series(entity)?.points.find((p) => p.year === year);
     return point && Number.isFinite(point.value) ? point.value : undefined;
+  }
+
+  /** [min, max] GDP per capita across the entire loaded dataset. */
+  gdpPerCapitaGlobalExtent(): [number, number] {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const { points } of this.byCountry.values()) {
+      for (const point of points) {
+        const v = getGdpPerCapita(point);
+        if (v === undefined) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    return [min, max];
+  }
+
+  /** [min, max] CO₂ per capita across the entire loaded dataset. */
+  co2PerCapitaGlobalExtent(): [number, number] {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const { points } of this.byCountry.values()) {
+      for (const point of points) {
+        const v = point.extra['co2_including_luc_per_capita'];
+        if (!Number.isFinite(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    return [min, max];
   }
 
   private static index(
