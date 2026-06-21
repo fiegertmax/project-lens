@@ -642,7 +642,7 @@ body {
 /* Lens drag: ghost trailing the cursor + the current drop-target highlight */
 .lens-ghost {
   position: fixed;
-  z-index: 30;
+  z-index: 70; /* above the world-map modal (z-index 50) and its label */
   display: grid;
   place-items: center;
   width: 32px;
@@ -1635,5 +1635,85 @@ body.line-dragging {
 }
 
 .world-map__label--hidden {
+  display: none;
+}
+
+.world-map__lens-ring {
+  fill: none;
+  stroke: var(--lens-border);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.world-map__lens-ring--hidden {
+  display: none;
+}
+
+/* Transparent grab band on the lens edge — interior stays free for selection. */
+.world-map__lens-grip {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 22;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.world-map__lens-grip:active {
+  cursor: grabbing;
+}
+
+.world-map__lens-grip--hidden {
+  display: none;
+}
+
+.world-map__toolbar {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.world-map__lens-handle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--lens-border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--lens);
+  cursor: grab;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.world-map__lens-handle:hover {
+  background: var(--lens-fill);
+}
+
+.world-map__lens-handle .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.world-map__lens-remove {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.world-map__lens-remove:hover {
+  border-color: var(--lens);
+  color: var(--lens);
+}
+
+.world-map__lens-remove--hidden {
   display: none;
 }

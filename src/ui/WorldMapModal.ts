@@ -32,7 +32,7 @@ export class WorldMapModal {
     title.textContent = 'Select countries';
     const hint = document.createElement('span');
     hint.className = 'world-map-modal__hint';
-    hint.textContent = 'Click a country to add or remove it';
+    hint.textContent = 'Click a country to add or remove it · drag the lens onto the map to magnify small countries';
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'world-map-modal__close';
