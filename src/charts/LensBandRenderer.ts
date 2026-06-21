@@ -116,6 +116,10 @@ function makeLensDragLocal(
   yearsPerPixel: number,
 ) {
   return drag<SVGRectElement, PlacedLens>()
+    .on('start', () => {
+      document.body.classList.add('lens-band-dragging');
+      window.dispatchEvent(new CustomEvent('lens-drag-start'));
+    })
     .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
       const delta = ev.dx * yearsPerPixel;
       opts.lensSync.moveLinkedLens(opts.key, d.id, delta);
@@ -134,6 +138,7 @@ function makeLensDragLocal(
       }
     })
     .on('end', () => {
+      document.body.classList.remove('lens-band-dragging');
       opts.onChange?.();
     });
 }

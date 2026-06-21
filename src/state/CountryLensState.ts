@@ -156,6 +156,13 @@ export class CountryLensState {
     this.notify();
   }
 
+  /** Removes all lenses across all countries and fires a single notify. */
+  clearAll(): void {
+    if (this.byCountry.size === 0) return;
+    this.byCountry.clear();
+    this.notify();
+  }
+
   /** Removes all lenses of the given stage across all countries and fires a single notify. */
   removeStage(stage: LensStage): void {
     let changed = false;

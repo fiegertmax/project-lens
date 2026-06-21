@@ -36,7 +36,6 @@ export function createLensDragSweeper<T>(
     ghost.className = 'lens-ghost';
     ghost.innerHTML = LENS_ICON;
     document.body.append(ghost);
-    document.body.classList.add('lens-dragging');
   };
 
   const moveGhost = (event: PointerEvent): void => {
@@ -61,6 +60,7 @@ export function createLensDragSweeper<T>(
     sweptKeys.clear();
     visitedTargets.clear();
     document.body.classList.remove('lens-dragging');
+    window.dispatchEvent(new CustomEvent('lens-drag-end'));
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
@@ -99,6 +99,8 @@ export function createLensDragSweeper<T>(
     const pointer = event as PointerEvent;
     if (pointer.button !== 0) return;
     origin = { x: pointer.clientX, y: pointer.clientY };
+    document.body.classList.add('lens-dragging');
+    window.dispatchEvent(new CustomEvent('lens-drag-start'));
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);

@@ -41,6 +41,7 @@ export class CrosshairOverlay {
   private innerH = 0;
   private entries: CrosshairEntry[] = [];
   private valueLabel: (v: number) => string = VALUE_FMT;
+  private readonly onLensDragStart: () => void;
 
   constructor(
     svg: Selection<SVGSVGElement, unknown, null, undefined>,
@@ -61,9 +62,16 @@ export class CrosshairOverlay {
     this.tooltip.className = 'crosshair-tooltip crosshair-tooltip--hidden';
     document.body.appendChild(this.tooltip);
 
+    this.onLensDragStart = () => this.hide();
+    window.addEventListener('lens-drag-start', this.onLensDragStart);
+
     svg.on('mousemove.crosshair', (event: MouseEvent) => {
-      // Cursor is on a drag hit path — hide so the user can grab the line
-      if ((event.target as Element).matches(hitPathSelector)) {
+      // Cursor is on a drag hit path, or any lens drag is in progress — hide the crosshair
+      if (
+        (event.target as Element).matches(hitPathSelector) ||
+        document.body.classList.contains('lens-band-dragging') ||
+        document.body.classList.contains('lens-dragging')
+      ) {
         this.hide();
         return;
       }
@@ -98,6 +106,7 @@ export class CrosshairOverlay {
 
   /** Remove the body-level tooltip div (call from chart.destroy()). */
   destroy(): void {
+    window.removeEventListener('lens-drag-start', this.onLensDragStart);
     this.tooltip.remove();
   }
 

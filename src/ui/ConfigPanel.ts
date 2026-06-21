@@ -1,9 +1,12 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { AppState, BaseVisualizationTab, YearRange } from '../state/AppState';
+import type { CountryLensState } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
 import { ContinentFocusSelector } from './ContinentFocusSelector';
 import { CountrySelector } from './CountrySelector';
+import { InfoTip } from './InfoTip';
 import { Tabs } from './Tabs';
+import { ToggleSwitch } from './ToggleSwitch';
 import { VizModeSelector } from './VizModeSelector';
 import { YearRangeSlider } from './YearRangeSlider';
 import { YearSelector } from './YearSelector';
@@ -16,6 +19,7 @@ export class ConfigPanel {
     dataset: EmissionsDataset,
     state: AppState,
     yearBounds: YearRange,
+    lensState: CountryLensState,
   ) {
     const panel = new Collapsible(parent, 'Base Visualization', 'config-panel');
 
@@ -30,6 +34,8 @@ export class ConfigPanel {
             new YearRangeSlider(timeSpan.body, state, yearBounds);
             const countries = new Collapsible(body, 'Countries', 'config-section');
             new CountrySelector(countries.body, dataset.countries(), state);
+            this.buildLucToggle(body, state);
+            this.buildPerCapitaToggle(body, state, lensState);
           },
         },
         {
@@ -45,5 +51,54 @@ export class ConfigPanel {
       state.activeTab(),
       (id) => state.setActiveTab(id as BaseVisualizationTab),
     );
+  }
+
+  private buildLucToggle(parent: HTMLElement, state: AppState): void {
+    const row = document.createElement('div');
+    row.className = 'config-toggle-row';
+
+    const label = document.createElement('span');
+    label.className = 'config-toggle-row__label';
+    label.textContent = 'Land use change';
+    row.appendChild(label);
+
+    const toggle = new ToggleSwitch(row, true);
+    toggle.set({ checked: true, disabled: false, label: 'Included' });
+
+    new InfoTip(
+      row,
+      'Land use change (LUC) CO₂ captures emissions from deforestation and land conversion — and can be negative when forests grow back. Excluding it shows all emissions excluding LUC, which often reveals cleaner long-term trends obscured by LUC volatility.',
+      'Land use change explanation',
+    );
+
+    toggle.onChange(() => {
+      const included = toggle.checked();
+      toggle.set({ checked: included, disabled: false, label: included ? 'Included' : 'Excluded' });
+      state.setIncludeLandUseChange(included);
+    });
+
+    parent.appendChild(row);
+  }
+
+  private buildPerCapitaToggle(parent: HTMLElement, state: AppState, lensState: CountryLensState): void {
+    const row = document.createElement('div');
+    row.className = 'config-toggle-row';
+
+    const label = document.createElement('span');
+    label.className = 'config-toggle-row__label';
+    label.textContent = 'Per capita';
+    row.appendChild(label);
+
+    const toggle = new ToggleSwitch(row, true);
+    toggle.set({ checked: false, disabled: false, label: 'Absolute' });
+
+    toggle.onChange(() => {
+      const perCapita = toggle.checked();
+      toggle.set({ checked: perCapita, disabled: false, label: perCapita ? 'Per capita' : 'Absolute' });
+      lensState.clearAll();
+      state.setMetricMode(perCapita ? 'per-capita' : 'absolute');
+    });
+
+    parent.appendChild(row);
   }
 }

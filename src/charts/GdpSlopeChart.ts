@@ -1,15 +1,13 @@
-import { axisLeft, format, line, scaleLinear, select } from 'd3';
+import { axisLeft, format, scaleLinear, select } from 'd3';
 import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { STAGE_COLORS } from '../config';
 import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import type { PlacedLens } from '../state/CountryLensState';
 
-const MARGIN = { top: 20, right: 56, bottom: 28, left: 44 };
+const MARGIN = { top: 20, right: 56, bottom: 28, left: 52 };
 const HEIGHT = 360;
 const YEAR_FMT = format('d');
-const CO2_FMT = format('.2~f');
-const GDP_FMT = format(',.0f');
 const CO2_COLOR = '#c0392b';
 const GDP_COLOR = '#2e86c1';
 
@@ -17,17 +15,15 @@ type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 type YScale = ScaleLinear<number, number>;
 
-interface MetricPoint {
-  x: number;
-  y: number | undefined;
+interface LensMetrics {
+  lens: PlacedLens;
+  startX: number;
+  endX: number;
+  co2Pct: number | undefined;
+  gdpPct: number | undefined;
 }
 
-interface RawValues {
-  co2: number | undefined;
-  gdp: number | undefined;
-}
-
-/** Standalone two-line normalized [0,1] slope chart for per-capita mode (GDP-02). Does NOT extend SlopeChart. */
+/** Slope chart showing percent change in CO₂/cap and GDP/cap over each lens window. */
 export class GdpSlopeChart {
   private readonly dataset: EmissionsDataset;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
@@ -51,45 +47,51 @@ export class GdpSlopeChart {
 
   clear(): void {
     ['axes', 'lines', 'labels'].forEach((name) => this.group(name).selectAll('*').remove());
+    this.root.style('display', 'none');
   }
 
-  render(country: string, lenses: PlacedLens[]): void {
+  render(country: string, lenses: PlacedLens[], includeLUC = true): void {
     if (lenses.length === 0) {
       this.clear();
       return;
     }
 
+    this.root.style('display', null);
     const width = this.root.node()!.clientWidth || 300;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
     this.svg.attr('width', width).attr('height', HEIGHT);
 
-    // Call extents exactly once — never inside a per-tick loop (research Pitfall 2).
-    const [gdpMin, gdpMax] = this.dataset.gdpPerCapitaGlobalExtent();
-    const [co2Min, co2Max] = this.dataset.co2PerCapitaGlobalExtent();
-
-    const columns = this.columnPositions(lenses, innerW);
-    const uniqueYears = [...columns.keys()];
-
     const series = this.dataset.series(country);
-    const rawByYear = new Map<number, RawValues>();
-    const co2Points: MetricPoint[] = [];
-    const gdpPoints: MetricPoint[] = [];
+    const columns = this.columnPositions(lenses, innerW);
 
-    for (const year of uniqueYears) {
-      const pt = series?.points.find((p) => p.year === year);
-      const v = pt?.extra['co2_including_luc_per_capita'];
-      const rawCo2 = v !== undefined && Number.isFinite(v) ? v : undefined;
-      const rawGdp = pt ? getGdpPerCapita(pt) : undefined;
-      rawByYear.set(year, { co2: rawCo2, gdp: rawGdp });
-      co2Points.push({ x: columns.get(year)!, y: normalize(rawCo2, co2Min, co2Max) });
-      gdpPoints.push({ x: columns.get(year)!, y: normalize(rawGdp, gdpMin, gdpMax) });
-    }
+    const metrics: LensMetrics[] = lenses.map((lens) => {
+      const startPt = series?.points.find((p) => p.year === lens.startYear);
+      const endPt = series?.points.find((p) => p.year === lens.endYear);
+      const co2Col = includeLUC ? 'co2_including_luc_per_capita' : 'co2_per_capita';
+      const co2Start = finiteOrUndef(startPt?.extra[co2Col]);
+      const co2End = finiteOrUndef(endPt?.extra[co2Col]);
+      const gdpStart = startPt ? getGdpPerCapita(startPt) : undefined;
+      const gdpEnd = endPt ? getGdpPerCapita(endPt) : undefined;
+      return {
+        lens,
+        startX: columns.get(lens.startYear)!,
+        endX: columns.get(lens.endYear)!,
+        co2Pct: pctChange(co2Start, co2End),
+        gdpPct: pctChange(gdpStart, gdpEnd),
+      };
+    });
 
-    const y: YScale = scaleLinear().domain([0, 1]).range([innerH, 0]);
-    this.renderAxes(columns, lenses, y, innerH);
-    this.renderLines(co2Points, gdpPoints, y, innerW, innerH);
-    this.renderLabels(uniqueYears, columns, rawByYear, y, [co2Min, co2Max], [gdpMin, gdpMax]);
+    const allPcts = metrics
+      .flatMap((m) => [m.co2Pct, m.gdpPct])
+      .filter((v): v is number => v !== undefined);
+    const yMin = allPcts.length ? Math.min(0, ...allPcts) : -10;
+    const yMax = allPcts.length ? Math.max(0, ...allPcts) : 10;
+    const y: YScale = scaleLinear().domain([yMin, yMax]).nice().range([innerH, 0]);
+
+    this.renderAxes(columns, lenses, y, innerH, innerW);
+    this.renderLines(metrics, y, innerW, innerH);
+    this.renderLabels(metrics, y);
   }
 
   private renderAxes(
@@ -97,16 +99,32 @@ export class GdpSlopeChart {
     lenses: PlacedLens[],
     y: YScale,
     innerH: number,
+    innerW: number,
   ): void {
     const g = this.group('axes');
 
-    // Left y-axis — NOT axisRight (research Anti-Pattern "floating-right y-scale").
     const yAxisGroup = g
       .selectAll<SVGGElement, null>('g.gdp-slope-chart__y-axis')
       .data([null])
       .join('g')
       .attr('class', 'gdp-slope-chart__y-axis') as unknown as SvgGroup;
-    yAxisGroup.call(axisLeft(y).ticks(5));
+    yAxisGroup.call(
+      axisLeft(y)
+        .ticks(5)
+        .tickFormat((d) => {
+          const n = Number(d);
+          return n === 0 ? '0%' : `${n > 0 ? '+' : ''}${n.toFixed(1)}%`;
+        }),
+    );
+
+    // Horizontal baseline at 0%
+    const zeroY = y(0);
+    g.selectAll<SVGLineElement, null>('line.gdp-slope-chart__baseline')
+      .data([null])
+      .join('line')
+      .attr('class', 'gdp-slope-chart__baseline')
+      .attr('x1', 0).attr('y1', zeroY)
+      .attr('x2', innerW).attr('y2', zeroY);
 
     g.selectAll<SVGLineElement, number>('line.gdp-slope-chart__axis-line')
       .data([...columns.values()])
@@ -136,49 +154,40 @@ export class GdpSlopeChart {
       .attr('stroke', (d) => d.color).attr('stroke-width', 3);
   }
 
-  private renderLines(
-    co2Points: MetricPoint[],
-    gdpPoints: MetricPoint[],
-    y: YScale,
-    innerW: number,
-    innerH: number,
-  ): void {
+  private renderLines(metrics: LensMetrics[], y: YScale, innerW: number, innerH: number): void {
     const g = this.group('lines');
     g.selectAll('*').remove();
 
-    // Two separate line generators with .defined() for broken-line gap handling (research Pattern 3).
-    const co2LineGen = line<MetricPoint>()
-      .defined((d) => d.y !== undefined)
-      .x((d) => d.x)
-      .y((d) => y(d.y!));
+    const zeroY = y(0);
+    let anyData = false;
 
-    const gdpLineGen = line<MetricPoint>()
-      .defined((d) => d.y !== undefined)
-      .x((d) => d.x)
-      .y((d) => y(d.y!));
+    for (const m of metrics) {
+      if (m.co2Pct !== undefined) {
+        anyData = true;
+        const endY = y(m.co2Pct);
+        g.append('line').attr('class', 'gdp-slope-chart__metric-line')
+          .attr('x1', m.startX).attr('y1', zeroY)
+          .attr('x2', m.endX).attr('y2', endY)
+          .attr('stroke', CO2_COLOR).attr('stroke-width', 2);
+        g.append('circle').attr('class', 'gdp-slope-chart__dot')
+          .attr('cx', m.startX).attr('cy', zeroY).attr('r', 3).attr('fill', CO2_COLOR);
+        g.append('circle').attr('class', 'gdp-slope-chart__dot')
+          .attr('cx', m.endX).attr('cy', endY).attr('r', 3).attr('fill', CO2_COLOR);
+      }
+      if (m.gdpPct !== undefined) {
+        anyData = true;
+        const endY = y(m.gdpPct);
+        g.append('line').attr('class', 'gdp-slope-chart__metric-line')
+          .attr('x1', m.startX).attr('y1', zeroY)
+          .attr('x2', m.endX).attr('y2', endY)
+          .attr('stroke', GDP_COLOR).attr('stroke-width', 2);
+        g.append('circle').attr('class', 'gdp-slope-chart__dot')
+          .attr('cx', m.startX).attr('cy', zeroY).attr('r', 3).attr('fill', GDP_COLOR);
+        g.append('circle').attr('class', 'gdp-slope-chart__dot')
+          .attr('cx', m.endX).attr('cy', endY).attr('r', 3).attr('fill', GDP_COLOR);
+      }
+    }
 
-    g.append('path')
-      .attr('class', 'gdp-slope-chart__metric-line')
-      .attr('d', co2LineGen(co2Points) ?? '')
-      .attr('stroke', CO2_COLOR).attr('stroke-width', 2).attr('fill', 'none');
-
-    g.append('path')
-      .attr('class', 'gdp-slope-chart__metric-line')
-      .attr('d', gdpLineGen(gdpPoints) ?? '')
-      .attr('stroke', GDP_COLOR).attr('stroke-width', 2).attr('fill', 'none');
-
-    // Endpoint dots make single-column gaps visible.
-    co2Points.filter((d) => d.y !== undefined).forEach((d) => {
-      g.append('circle').attr('class', 'gdp-slope-chart__dot')
-        .attr('cx', d.x).attr('cy', y(d.y!)).attr('r', 3).attr('fill', CO2_COLOR);
-    });
-
-    gdpPoints.filter((d) => d.y !== undefined).forEach((d) => {
-      g.append('circle').attr('class', 'gdp-slope-chart__dot')
-        .attr('cx', d.x).attr('cy', y(d.y!)).attr('r', 3).attr('fill', GDP_COLOR);
-    });
-
-    const anyData = [...co2Points, ...gdpPoints].some((d) => d.y !== undefined);
     if (!anyData) {
       g.append('text')
         .attr('class', 'gdp-slope-chart__empty')
@@ -188,57 +197,38 @@ export class GdpSlopeChart {
     }
   }
 
-  private renderLabels(
-    uniqueYears: number[],
-    columns: Map<number, number>,
-    rawByYear: Map<number, RawValues>,
-    y: YScale,
-    co2Extent: [number, number],
-    gdpExtent: [number, number],
-  ): void {
+  private renderLabels(metrics: LensMetrics[], y: YScale): void {
     const g = this.group('labels');
     g.selectAll('*').remove();
 
-    const rightYear = uniqueYears[uniqueYears.length - 1];
-    const rightX = columns.get(rightYear)!;
-    const rightRaw = rawByYear.get(rightYear);
+    for (let i = 0; i < metrics.length; i++) {
+      const m = metrics[i];
+      const isLast = i === metrics.length - 1;
 
-    // Metric name labels positioned at the actual line endpoints (fallback to mid-scale).
-    const co2LabelY = rightRaw?.co2 !== undefined
-      ? y(normalize(rightRaw.co2, co2Extent[0], co2Extent[1]) ?? 0)
-      : y(0.7);
-    const gdpLabelY = rightRaw?.gdp !== undefined
-      ? y(normalize(rightRaw.gdp, gdpExtent[0], gdpExtent[1]) ?? 0)
-      : y(0.3);
-
-    g.append('text').attr('class', 'gdp-slope-chart__label')
-      .attr('x', rightX + 4).attr('y', co2LabelY)
-      .attr('dy', '0.35em').attr('fill', CO2_COLOR).text('CO₂/cap');
-
-    g.append('text').attr('class', 'gdp-slope-chart__label')
-      .attr('x', rightX + 4).attr('y', gdpLabelY)
-      .attr('dy', '0.35em').attr('fill', GDP_COLOR).text('GDP/cap');
-
-    // Per-year raw value labels: CO₂ above the dot, GDP below (to avoid collision).
-    for (const year of uniqueYears) {
-      const x = columns.get(year)!;
-      const raw = rawByYear.get(year);
-      if (!raw) continue;
-
-      if (raw.co2 !== undefined) {
-        const ny = y(normalize(raw.co2, co2Extent[0], co2Extent[1]) ?? 0);
+      if (m.co2Pct !== undefined) {
+        const endY = y(m.co2Pct);
         g.append('text').attr('class', 'gdp-slope-chart__value-label')
-          .attr('x', x).attr('y', ny - 8)
+          .attr('x', m.endX).attr('y', endY - 8)
           .attr('text-anchor', 'middle').attr('fill', CO2_COLOR)
-          .text(CO2_FMT(raw.co2));
+          .text(fmtPct(m.co2Pct));
+        if (isLast) {
+          g.append('text').attr('class', 'gdp-slope-chart__label')
+            .attr('x', m.endX + 4).attr('y', endY)
+            .attr('dy', '0.35em').attr('fill', CO2_COLOR).text('CO₂/cap');
+        }
       }
 
-      if (raw.gdp !== undefined) {
-        const ny = y(normalize(raw.gdp, gdpExtent[0], gdpExtent[1]) ?? 0);
+      if (m.gdpPct !== undefined) {
+        const endY = y(m.gdpPct);
         g.append('text').attr('class', 'gdp-slope-chart__value-label')
-          .attr('x', x).attr('y', ny + 16)
+          .attr('x', m.endX).attr('y', endY + 16)
           .attr('text-anchor', 'middle').attr('fill', GDP_COLOR)
-          .text(GDP_FMT(raw.gdp));
+          .text(fmtPct(m.gdpPct));
+        if (isLast) {
+          g.append('text').attr('class', 'gdp-slope-chart__label')
+            .attr('x', m.endX + 4).attr('y', endY)
+            .attr('dy', '0.35em').attr('fill', GDP_COLOR).text('GDP/cap');
+        }
       }
     }
   }
@@ -267,9 +257,15 @@ export class GdpSlopeChart {
   }
 }
 
-function normalize(value: number | undefined, min: number, max: number): number | undefined {
-  if (value === undefined) return undefined;
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
-  if (max === min) return 0;
-  return (value - min) / (max - min);
+function pctChange(start: number | undefined, end: number | undefined): number | undefined {
+  if (start === undefined || end === undefined || start === 0) return undefined;
+  return ((end - start) / Math.abs(start)) * 100;
+}
+
+function finiteOrUndef(v: number | undefined): number | undefined {
+  return v !== undefined && Number.isFinite(v) ? v : undefined;
+}
+
+function fmtPct(v: number): string {
+  return v === 0 ? '0%' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
 }

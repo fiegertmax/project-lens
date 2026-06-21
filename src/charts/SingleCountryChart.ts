@@ -13,6 +13,7 @@ import type { DataPoint, MetricDefinition } from '../data/types';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
 import type { AppState } from '../state/AppState';
 import { resolveSeries } from '../utils/interpolation';
+import { extraColumnFor, metricSpec } from '../utils/metricSpec';
 import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands } from './LensBandRenderer';
@@ -144,7 +145,9 @@ export class SingleCountryChart {
     this.svg.attr('width', width).attr('height', HEIGHT);
 
     const rawSeries = this.dataset.series(this.country);
-    const extraColumn = includeLUC ? undefined : 'co2';
+    const metricMode = this.state.metricMode();
+    const extraColumn = extraColumnFor(metricMode, includeLUC);
+    const spec = metricSpec(metricMode, includeLUC);
     const points = rawSeries ? resolveSeries(rawSeries, yearRange, extraColumn) : [];
     const entries: SeriesEntry[] = [{ country: this.country, points }];
 
@@ -182,7 +185,12 @@ export class SingleCountryChart {
       label: e.country,
       color: this.colorFor(e.country),
       points: e.points,
-    })));
+    })), spec.valueLabel);
+
+    if (this.lensState) {
+      const lenses = this.lensState.lensesFor(this.country);
+      if (lenses.length > 0) this.renderSlope(lenses);
+    }
   }
 
   /**
@@ -209,7 +217,7 @@ export class SingleCountryChart {
     if (this.state.metricMode() === 'per-capita') {
       // Clear the absolute panel first so no stale source lines linger on mode switch.
       this.slopeChart.clear();
-      this.gdpSlopeChart.render(this.country, lenses);
+      this.gdpSlopeChart.render(this.country, lenses, this.includeLUC);
     } else {
       // Clear the GDP panel first so no stale normalized lines linger on mode switch.
       this.gdpSlopeChart.clear();

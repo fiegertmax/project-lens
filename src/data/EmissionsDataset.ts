@@ -50,35 +50,13 @@ export class EmissionsDataset {
     return point && Number.isFinite(point.value) ? point.value : undefined;
   }
 
-  /** [min, max] GDP per capita across the entire loaded dataset. */
-  gdpPerCapitaGlobalExtent(): [number, number] {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const { points } of this.byCountry.values()) {
-      for (const point of points) {
-        const v = getGdpPerCapita(point);
-        if (v === undefined) continue;
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    return [min, max];
+  /** Returns true if the entity has at least one data point with a finite GDP per capita value. */
+  hasGdpData(country: string): boolean {
+    const series = this.byCountry.get(country);
+    if (!series) return false;
+    return series.points.some((p) => getGdpPerCapita(p) !== undefined);
   }
 
-  /** [min, max] CO₂ per capita across the entire loaded dataset. */
-  co2PerCapitaGlobalExtent(): [number, number] {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const { points } of this.byCountry.values()) {
-      for (const point of points) {
-        const v = point.extra['co2_including_luc_per_capita'];
-        if (!Number.isFinite(v)) continue;
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    return [min, max];
-  }
 
   private static index(
     rows: DSVRowString[],

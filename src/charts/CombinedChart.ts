@@ -21,6 +21,7 @@ import type { LineDragCallbacks } from './drag-types';
 import type { LensSync } from './LensSync';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
+import { LensScatterPlot } from './LensScatterPlot';
 import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTip } from '../ui/InfoTip';
 import { CrosshairOverlay } from './CrosshairOverlay';
@@ -63,7 +64,9 @@ export class CombinedChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
   private readonly slopeChart: SlopeChart;
+  private readonly scatterPlot: LensScatterPlot;
   private readonly weightedToggle: ToggleSwitch;
+  private readonly slopeHeader: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly unsub: () => void;
   private useWeightedMean = false;
   private readonly crosshair: CrosshairOverlay;
@@ -109,8 +112,9 @@ export class CombinedChart {
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
     this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.combined-line-hit');
 
-    // Toggle row above the slope chart
+    // Toggle row above the slope chart (hidden when scatter plot is active)
     const toggleRow = slopeCell.append('div').attr('class', 'combined-chart__slope-header');
+    this.slopeHeader = toggleRow;
     this.weightedToggle = new ToggleSwitch(toggleRow.node()!, true);
     this.weightedToggle.set({ checked: false, disabled: false, label: 'Simple mean' });
     new InfoTip(
@@ -131,6 +135,7 @@ export class CombinedChart {
     });
 
     this.slopeChart = new SlopeChart(slopeCell.node()!, dataset);
+    this.scatterPlot = new LensScatterPlot(slopeCell.node()!, dataset);
     this.unsub = state.subscribe(() => this.update());
   }
 
@@ -155,6 +160,7 @@ export class CombinedChart {
     this.lensUnsub?.();
     this.crosshair.destroy();
     this.slopeChart.destroy();
+    this.scatterPlot.destroy();
     this.unsub();
     this.root.remove();
   }
@@ -209,6 +215,11 @@ export class CombinedChart {
       color: color(e.country),
       points: e.points,
     })), spec.valueLabel);
+
+    const lenses = this.lensState?.lensesFor(COMBINED_CHART_KEY) ?? [];
+    if (lenses.length > 0 && metricMode === 'per-capita') {
+      this.scatterPlot.render(countries, lenses, includeLUC, color);
+    }
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number, spec: { label: string; unit: string }): void {
@@ -334,20 +345,11 @@ export class CombinedChart {
   private renderLegend(countries: string[], color: (c: string) => string, innerW: number): void {
     const legendGroup = this.group('legend').attr(
       'transform',
-      `translate(${innerW - 160},8)`,
+      `translate(${innerW - 120},0)`,
     );
 
-    legendGroup
-      .selectAll<SVGRectElement, unknown>('rect.legend-bg')
-      .data([null])
-      .join('rect')
-      .attr('class', 'legend-bg')
-      .attr('width', 160)
-      .attr('height', countries.length * 20 + 8)
-      .attr('rx', 4)
-      .attr('fill', 'var(--bg)')
-      .attr('stroke', 'var(--border)')
-      .attr('stroke-width', 1);
+    // Remove stale background rect from old design
+    legendGroup.selectAll('rect.legend-bg').remove();
 
     legendGroup
       .selectAll<SVGGElement, string>('g.legend-row')
@@ -357,17 +359,17 @@ export class CombinedChart {
         (update) => update,
         (exit) => exit.remove(),
       )
-      .attr('transform', (_d, i) => `translate(8,${i * 20 + 8})`)
+      .attr('transform', (_d, i) => `translate(0,${i * 18})`)
       .attr('cursor', 'default')
       .call((row) => {
         row
-          .selectAll<SVGRectElement, string>('rect.legend-swatch')
+          .selectAll<SVGCircleElement, string>('circle.legend-swatch')
           .data((d) => [d])
-          .join('rect')
+          .join('circle')
           .attr('class', 'legend-swatch')
-          .attr('width', 10)
-          .attr('height', 10)
-          .attr('rx', 2)
+          .attr('cx', 5)
+          .attr('cy', 5)
+          .attr('r', 5)
           .attr('fill', (d) => color(d));
 
         row
@@ -375,7 +377,7 @@ export class CombinedChart {
           .data((d) => [d])
           .join('text')
           .attr('class', 'legend-label')
-          .attr('x', 16)
+          .attr('x', 14)
           .attr('y', 9)
           .attr('font-size', '12px')
           .attr('fill', 'var(--text)')
@@ -442,9 +444,23 @@ export class CombinedChart {
     this.root.classed('combined-chart--lens-active', active);
     this.update();
     const perCapita = this.state.metricMode() === 'per-capita';
-    if (active && !perCapita) {
+    if (active && perCapita) {
+      // Per-capita mode: show scatterplot (CO₂/cap vs GDP/cap, one point per country per year per lens)
+      this.slopeChart.clear();
+      this.slopeHeader.style('display', 'none');
+      requestAnimationFrame(() => {
+        const color = this.colorFor
+          ?? ((c: string) => scaleOrdinal(this.countries, schemeTableau10 as readonly string[])(c));
+        this.scatterPlot.render(this.countries, lenses, this.state.includeLandUseChange(), color);
+      });
+    } else if (active) {
+      // Absolute mode: restore cross-country mean slope chart
+      this.scatterPlot.clear();
+      this.slopeHeader.style('display', null);
       requestAnimationFrame(() => this.renderSlope(lenses));
     } else {
+      this.scatterPlot.clear();
+      this.slopeHeader.style('display', null);
       this.slopeChart.clear();
     }
   }

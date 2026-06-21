@@ -1,4 +1,6 @@
 import { LENS_STAGE_WIDTH } from '../config';
+import type { EmissionsDataset } from '../data/EmissionsDataset';
+import type { AppState } from '../state/AppState';
 import type { CountryLensState, LensStage } from '../state/CountryLensState';
 import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
@@ -24,11 +26,15 @@ export class LensStagePanel {
   readonly root: HTMLDivElement;
 
   private readonly state: CountryLensState;
+  private readonly appState: AppState;
+  private readonly dataset: EmissionsDataset;
   private readonly stageButtons = new Map<LensStage, HTMLButtonElement>();
   private readonly removeButtons = new Map<LensStage, HTMLButtonElement>();
 
-  constructor(parent: HTMLElement, state: CountryLensState) {
+  constructor(parent: HTMLElement, state: CountryLensState, appState: AppState, dataset: EmissionsDataset) {
     this.state = state;
+    this.appState = appState;
+    this.dataset = dataset;
     const panel = new Collapsible(parent, 'Lens', 'lens-stage-panel');
     this.root = panel.root;
 
@@ -71,7 +77,17 @@ export class LensStagePanel {
 
   private wireDrag(btn: HTMLButtonElement, stage: LensStage): void {
     createLensDragSweeper<HTMLElement>(btn, {
-      resolveTarget: (x, y) => lensDropTargetAt(x, y),
+      resolveTarget: (x, y) => {
+        const el = lensDropTargetAt(x, y);
+        if (!el) return null;
+        if (this.appState.metricMode() === 'per-capita') {
+          const country = el.dataset.country;
+          // Single-country charts without GDP data are not valid drop targets in per-capita mode.
+          // The combined chart (no data-country) is always valid — it shows the scatter plot.
+          if (country && !this.dataset.hasGdpData(country)) return null;
+        }
+        return el;
+      },
       onHover: (target, previous) => {
         previous?.classList.remove('single-country-chart--drop', 'combined-chart--drop');
         target?.classList.add(
@@ -94,8 +110,25 @@ export class LensStagePanel {
     const sibling = this.state.allLenses().find(({ lens }) => lens.stage === stage);
     const { startYear, endYear } = sibling
       ? { startYear: sibling.lens.startYear, endYear: sibling.lens.endYear }
-      : this.placementWindow(chartEl);
+      : this.freeWindow(key, chartEl);
     this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
+  }
+
+  /**
+   * Computes a placement window that doesn't collide with existing lenses on `key`.
+   * Prefers the centered default; if that overlaps, places immediately after the last lens.
+   */
+  private freeWindow(key: string, chartEl: HTMLElement): { startYear: number; endYear: number } {
+    const preferred = this.placementWindow(chartEl);
+    const existing = this.state.lensesFor(key);
+    if (existing.length === 0) return preferred;
+    const overlaps = existing.some(
+      (l) => preferred.startYear < l.endYear && l.startYear < preferred.endYear,
+    );
+    if (!overlaps) return preferred;
+    const last = existing[existing.length - 1];
+    const span = preferred.endYear - preferred.startYear;
+    return { startYear: last.endYear, endYear: last.endYear + span };
   }
 
   /** Derives a placement window centered in the chart's visible year domain.

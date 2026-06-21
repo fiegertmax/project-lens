@@ -59,19 +59,19 @@ body {
   color: var(--text-muted);
 }
 
-/* Global LUC toggle row */
-.luc-toggle-panel {
+/* Toggle rows inside the config panel */
+.config-toggle-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  margin-bottom: 12px;
+  margin-top: 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
 }
 
-.luc-toggle-panel__label {
+.config-toggle-row__label {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
@@ -1239,6 +1239,12 @@ body.line-dragging {
   stroke-width: 1.5;
 }
 
+.gdp-slope-chart__baseline {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
 .gdp-slope-chart__year-label {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -1272,6 +1278,41 @@ body.line-dragging {
 .gdp-slope-chart__empty {
   fill: var(--text-muted);
   font-size: 11px;
+}
+
+/* Lens scatterplot (combined chart, absolute emissions mode) */
+
+.lens-scatter-plot__svg {
+  width: 100%;
+}
+
+.lens-scatter-plot .lens-scatter-plot__x-axis path,
+.lens-scatter-plot .lens-scatter-plot__x-axis line,
+.lens-scatter-plot .lens-scatter-plot__y-axis path,
+.lens-scatter-plot .lens-scatter-plot__y-axis line {
+  stroke: var(--border);
+}
+
+.lens-scatter-plot .lens-scatter-plot__x-axis text,
+.lens-scatter-plot .lens-scatter-plot__y-axis text {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lens-scatter-plot__x-label,
+.lens-scatter-plot__y-label {
+  fill: var(--text-muted);
+  font-size: 10px;
+}
+
+.lens-scatter-plot__legend-label {
+  fill: var(--text);
+  font-size: 10px;
+}
+
+.lens-scatter-plot__point {
+  cursor: default;
 }
 
 /* Phase 4: staged lens icons + placed lens bands */

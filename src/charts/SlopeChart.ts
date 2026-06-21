@@ -59,6 +59,7 @@ export class SlopeChart {
     ['axes', 'lines', 'labels', 'y-scale'].forEach((name) =>
       this.group(name).selectAll('*').remove(),
     );
+    this.root.style('display', 'none');
   }
 
   /**
@@ -77,6 +78,7 @@ export class SlopeChart {
       return;
     }
 
+    this.root.style('display', null);
     const width = this.root.node()!.clientWidth || 300;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
@@ -121,6 +123,7 @@ export class SlopeChart {
       return;
     }
 
+    this.root.style('display', null);
     const width = this.root.node()!.clientWidth || 300;
     const innerW = width - MARGIN.left - MARGIN.right;
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
