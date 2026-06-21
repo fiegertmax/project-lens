@@ -8,8 +8,10 @@ import { InfoTip } from './InfoTip';
 import { Tabs } from './Tabs';
 import { ToggleSwitch } from './ToggleSwitch';
 import { VizModeSelector } from './VizModeSelector';
+import { WorldMapModal } from './WorldMapModal';
 import { YearRangeSlider } from './YearRangeSlider';
 import { YearSelector } from './YearSelector';
+import { GLOBE_ICON } from './icons';
 
 /** Minimizable panel holding the (also minimizable) configuration controls,
  *  one tab per base visualization. */
@@ -33,6 +35,7 @@ export class ConfigPanel {
             const timeSpan = new Collapsible(body, 'Time span', 'config-section');
             new YearRangeSlider(timeSpan.body, state, yearBounds);
             const countries = new Collapsible(body, 'Countries', 'config-section');
+            this.buildWorldMapButton(countries, dataset, state);
             new CountrySelector(countries.body, dataset.countries(), state);
             this.buildLucToggle(body, state);
             this.buildPerCapitaToggle(body, state, lensState);
@@ -51,6 +54,21 @@ export class ConfigPanel {
       state.activeTab(),
       (id) => state.setActiveTab(id as BaseVisualizationTab),
     );
+  }
+
+  /** Globe button in the Countries header that opens the quick-select map. */
+  private buildWorldMapButton(section: Collapsible, dataset: EmissionsDataset, state: AppState): void {
+    const modal = new WorldMapModal(dataset, state);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'world-map-button';
+    button.setAttribute('aria-label', 'Pick countries on a world map');
+    button.innerHTML = GLOBE_ICON;
+    button.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't toggle the collapsible
+      void modal.open();
+    });
+    section.appendToHeader(button);
   }
 
   private buildLucToggle(parent: HTMLElement, state: AppState): void {
