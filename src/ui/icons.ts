@@ -6,6 +6,15 @@ export const LENS_ICON = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="tru
   <line x1="15.2" y1="15.2" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
 </svg>`;
 
+/** Globe glyph for the "quick select on a world map" button. */
+export const GLOBE_ICON = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+  <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+  <ellipse cx="12" cy="12" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="2"/>
+  <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2"/>
+  <line x1="4.5" y1="7" x2="19.5" y2="7" stroke="currentColor" stroke-width="2"/>
+  <line x1="4.5" y1="17" x2="19.5" y2="17" stroke="currentColor" stroke-width="2"/>
+</svg>`;
+
 /** Circled "i" help glyph for the info tip. */
 export const INFO_ICON = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
   <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
