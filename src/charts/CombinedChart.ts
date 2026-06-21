@@ -26,8 +26,7 @@ import { ToggleSwitch } from '../ui/ToggleSwitch';
 import { InfoTip } from '../ui/InfoTip';
 import { CrosshairOverlay } from './CrosshairOverlay';
 import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
-import { crossCountryMean } from '../utils/crossCountryMean';
-import type { MeanMode } from '../utils/crossCountryMean';
+import { crossCountryMean, crossCountrySum } from '../utils/crossCountryMean';
 
 const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const HEIGHT = 360;
@@ -466,20 +465,16 @@ export class CombinedChart {
   }
 
   private renderSlope(lenses: PlacedLens[]): void {
-    const mode: MeanMode = this.useWeightedMean ? 'weighted' : 'simple';
     const windows: StagedLensWindow[] = lenses.map((l) => ({
       stage: l.stage,
       startYear: l.startYear,
       endYear: l.endYear,
     }));
-    const aggregated: AggregatedLensWindow[] = crossCountryMean(
-      this.countries,
-      windows,
-      this.dataset,
-      this.state.yearRange(),
-      mode,
-      this.state.includeLandUseChange(),
-    );
+    const includeLUC = this.state.includeLandUseChange();
+    const aggregated: AggregatedLensWindow[] = this.countries.length > 1
+      ? crossCountrySum(this.countries, windows, this.dataset, includeLUC)
+      : crossCountryMean(this.countries, windows, this.dataset, this.state.yearRange(),
+          this.useWeightedMean ? 'weighted' : 'simple', includeLUC);
     this.slopeChart.renderAggregated(aggregated);
   }
 

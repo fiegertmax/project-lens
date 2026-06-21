@@ -23,13 +23,13 @@ As a user, I want to be able to discover trends in CO2-emissions and understand 
 - the lens implemented from the prior use case can be used on a chart that contains multiple lines
 - the lens behaves just as the other lenses: when applied with shift to multiple graphs, all can move and zoom together, no matter which type of graph they are on
 - on the right, a slope graph appears just like it currently does
-- the slope graph displays the common (mean) slope for all the countries Nwithin the lens scope
+- the slope graph displays the slope for the total summed up values of all the countries within the lens scope
 - the user can toggle how the mean is calculated: in total or proportional?
 
 ## UC-03: Research trends in per-capita emissions with respect to the gdp
 - no 'simple / weighted' mean toggle in lens ui
-- lens on single country chart: slope graph for years: emissions and gdp
-- lens on multi country chart: scatterplot; each country has its own shape 
+- when applying the lens on a single country chart, a slope graph appears that shows the percentual change in co2 per capita and gdp per capita in the scope of the lens
+- when applying the lens to a multi country chart, a scatterplot appears that shows a dot for each country in each year of the lens in a co2 / gdp coordinate system
 
 ## Other Ideas
 - add option to exclude land use change (which is often resposible for large differences in emissions)
