@@ -20,7 +20,7 @@ export class AppState {
   private focusContinent: string | null = null;
   private vizMode: GlobalVizMode = 'sankey';
   private lucEnabled = true;
-  private metric: MetricMode = 'absolute';
+  private metric: MetricMode = 'per-capita';
   private readonly listeners = new Set<Listener>();
 
   constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {

@@ -121,7 +121,7 @@ export class ConfigPanel {
     row.appendChild(label);
 
     const toggle = new ToggleSwitch(row, true);
-    toggle.set({ checked: false, disabled: false, label: 'Absolute' });
+    toggle.set({ checked: true, disabled: false, label: 'Per capita' });
 
     toggle.onChange(() => {
       const perCapita = toggle.checked();
