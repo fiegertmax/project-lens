@@ -36,7 +36,7 @@ export interface LensBandRenderOptions {
  * Key-parameterized so it works for both single-country charts and the combined chart.
  */
 export function renderLensBands(opts: LensBandRenderOptions): void {
-  // Idempotent group creation — matches SingleCountryChart.group() pattern.
+  // Idempotent group creation.
   const bandGroup = opts.plot
     .selectAll<SVGGElement, null>('g.lens-band')
     .data([null])
