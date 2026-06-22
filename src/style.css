@@ -663,14 +663,7 @@ body.lens-dragging {
   user-select: none;
 }
 
-.single-country-chart--drop {
-  outline: 2px dashed var(--lens-border);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
-
-/* Lens-drop highlight for the combined chart — mirrors the single-country drop ring. */
-.combined-chart--drop {
+.emissions-chart--drop {
   outline: 2px dashed var(--lens-border);
   outline-offset: 3px;
   border-radius: 6px;
@@ -1054,8 +1047,7 @@ body.pie-lens-dragging {
 }
 
 /* Drop-target highlight on a chart row */
-.chart-area__row--drop,
-.combined-chart.chart-area__row--drop {
+.chart-area__row--drop {
   outline: 2px dashed var(--accent);
   outline-offset: 3px;
   border-radius: 6px;
@@ -1089,39 +1081,36 @@ body.line-dragging {
 }
 
 /* Grab cursor on transparent hit overlay paths */
-.combined-chart .combined-line-hit,
-.single-country-chart .single-line-hit {
+.emissions-chart .emissions-line-hit {
   cursor: grab;
 }
 
-/* Source line dims during active drag */
-.combined-chart__line--dragging,
-.single-line--dragging {
-  opacity: 0.2;
-}
-
-/* Container for an extracted single-country row */
-.single-country-chart {
+/* Unified emissions chart container */
+.emissions-chart {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* Country name label above the SVG */
-.single-country-chart__label {
+/* Country name label — visible in single-country mode, hidden in multi mode */
+.emissions-chart__label {
   font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text);
 }
 
+.emissions-chart--multi .emissions-chart__label {
+  display: none;
+}
+
 /* SVG fills its container width */
-.single-country-chart__svg {
+.emissions-chart__svg {
   width: 100%;
 }
 
 /* Horizontal container: line chart left, slope panel right */
-.single-country-chart__body {
+.emissions-chart__body {
   display: flex;
   flex-direction: row;
   align-items: stretch;
@@ -1129,58 +1118,35 @@ body.line-dragging {
   width: 100%;
 }
 
-/* Line chart fills remaining body width (grows to fill after slope panel + gap) */
-.single-country-chart__line {
+/* Line chart fills remaining body width */
+.emissions-chart__line {
   flex: 1 1 0;
-  min-width: 0; /* allows SVG to shrink inside flex */
+  min-width: 0;
 }
 
-/* Slope panel reserves 1/3 width but stays hidden until a lens is active (SLOPE-02) */
-.single-country-chart__slope {
+/* Slope panel hidden until a lens is active */
+.emissions-chart__slope {
   flex: 0 0 33.333%;
   min-width: 0;
   display: none;
 }
 
-/* Lens-active modifier: reveal the slope panel (SLOPE-01) */
-.single-country-chart--lens-active .single-country-chart__slope {
+/* Reveal slope panel when a lens is active */
+.emissions-chart--lens-active .emissions-chart__slope {
   display: block;
 }
 
-/* Combined chart body — mirrors .single-country-chart__body */
-.combined-chart__body {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 16px;
-  width: 100%;
-}
-
-/* Line chart cell fills remaining body width (distinct from .combined-chart__line--dragging opacity modifier) */
-.combined-chart__line {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* Slope panel reserves 1/3 width, hidden until lens active */
-.combined-chart__slope {
-  flex: 0 0 33.333%;
-  min-width: 0;
+/* Weighted-mean toggle header — hidden in single mode, shown in multi mode */
+.emissions-chart__slope-header {
   display: none;
-}
-
-/* Reveal slope panel when a lens is active on the combined chart */
-.combined-chart--lens-active .combined-chart__slope {
-  display: block;
-}
-
-/* Toggle row above the slope chart SVG, centered */
-.combined-chart__slope-header {
-  display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   padding: 4px 0;
+}
+
+.emissions-chart--multi .emissions-chart__slope-header {
+  display: flex;
 }
 
 /* SVG fills the 1/3 slope panel container */

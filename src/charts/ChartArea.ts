@@ -3,36 +3,50 @@ import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState } from '../state/CountryLensState';
-import { CombinedChart } from './CombinedChart';
+import { COMBINED_CHART_KEY } from '../state/CountryLensState';
+import { EmissionsChart } from './EmissionsChart';
 import type { LineDragCallbacks } from './drag-types';
 import { LensSync } from './LensSync';
-import { SingleCountryChart } from './SingleCountryChart';
+
+const MAIN_CHART_ID = '__main__';
+let _rowCounter = 0;
 
 type DropTarget =
+  | { kind: 'chart'; chartId: string }
   | { kind: 'new-row' }
-  | { kind: 'combined' }
-  | { kind: 'single-row'; country: string }
   | { kind: 'invalid' };
 
-/** Orchestrates the combined chart and extracted single-country rows. */
+interface ChartGroup {
+  chartId: string;
+  lensKey: string;
+  countries: string[];
+}
+
+/** Orchestrates a fleet of EmissionsChart instances — one main chart plus extracted row charts. */
 export class ChartArea {
   private readonly div: HTMLDivElement;
   private readonly rowContainer: HTMLDivElement;
-  private readonly combinedChart: CombinedChart;
   private readonly dropSpacer: HTMLDivElement;
   private readonly dataset: EmissionsDataset;
   private readonly state: AppState;
-  private readonly metric: MetricDefinition;
+  // metric retained in constructor signature for API compatibility with app.ts
   private readonly unsub: () => void;
 
   private readonly lensState: CountryLensState;
   private readonly lensSync: LensSync;
 
-  // Extraction state — never written to AppState (D-14)
-  private extractedCountries: string[] = [];
-  private readonly rows = new Map<string, SingleCountryChart>();
+  // Main chart — always present, always receives newly selected countries
+  private readonly mainGroup: ChartGroup = {
+    chartId: MAIN_CHART_ID,
+    lensKey: COMBINED_CHART_KEY,
+    countries: [],
+  };
+  private readonly mainChart: EmissionsChart;
 
-  // Shared color scale; rebuilt over full selection on every reconcile
+  // Extracted row charts, one per dragged-out group
+  private readonly rowGroups: ChartGroup[] = [];
+  private readonly rowCharts = new Map<string, EmissionsChart>();
+
   private colorFor!: (c: string) => string;
 
   // Ghost drag state
@@ -49,7 +63,7 @@ export class ChartArea {
   ) {
     this.dataset = dataset;
     this.state = state;
-    this.metric = metric;
+    void metric;
     this.lensState = lensState;
     this.lensSync = new LensSync(lensState);
 
@@ -61,18 +75,22 @@ export class ChartArea {
     this.rowContainer.className = 'chart-area__rows';
     this.div.appendChild(this.rowContainer);
 
-    this.combinedChart = new CombinedChart(this.rowContainer, dataset, state, metric);
-    // Combined chart root participates in drop detection as a chart-area__row
-    this.combinedChart.node().classList.add('chart-area__row');
-    // Wire lens state into the combined chart ONCE — it persists for the app lifetime
-    // (single-country rows are re-wired per reconcile, but the combined chart is never destroyed). CLENS-01..04
-    this.combinedChart.setLensState(this.lensState, this.lensSync);
+    // Build initial color scale before creating the main chart
+    this.colorFor = this.buildColorFor([]);
+
+    this.mainChart = new EmissionsChart(
+      MAIN_CHART_ID,
+      COMBINED_CHART_KEY,
+      this.rowContainer,
+      [],
+      dataset,
+      state,
+    );
+    this.mainChart.setLensState(this.lensState, this.lensSync);
 
     this.dropSpacer = document.createElement('div');
     this.dropSpacer.className = 'chart-area__drop-spacer';
     this.div.appendChild(this.dropSpacer);
-
-    // Ctrl/Cmd wheel resize is now handled per-lens in SingleCountryChart (Plan 04).
 
     this.onEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') this.cancelDrag();
@@ -82,7 +100,6 @@ export class ChartArea {
     this.reconcile();
   }
 
-  /** Root element used by app.ts to toggle visibility. */
   node(): HTMLDivElement {
     return this.div;
   }
@@ -93,9 +110,9 @@ export class ChartArea {
 
   destroy(): void {
     this.unsub();
-    this.combinedChart.destroy();
-    for (const chart of this.rows.values()) chart.destroy();
-    this.rows.clear();
+    this.mainChart.destroy();
+    for (const chart of this.rowCharts.values()) chart.destroy();
+    this.rowCharts.clear();
     this.div.remove();
   }
 
@@ -116,60 +133,61 @@ export class ChartArea {
     const selected = this.state.selectedCountries();
     const selectedSet = new Set(selected);
 
-    // (1) Purge extracted countries no longer in selection
-    this.extractedCountries = this.extractedCountries.filter((c) => selectedSet.has(c));
+    // (1) Rebuild shared color over full selection first
+    this.colorFor = this.buildColorFor(selected);
+    this.mainChart.colorFor = this.colorFor;
 
-    // (2) Destroy rows for countries removed from selection OR moved back to combined
-    const extractedSet = new Set(this.extractedCountries);
-    for (const [country, chart] of this.rows) {
-      if (!selectedSet.has(country) || !extractedSet.has(country)) {
-        chart.destroy();
-        this.rows.delete(country);
+    // (2) Remove deselected countries from main group
+    this.mainGroup.countries = this.mainGroup.countries.filter((c) => selectedSet.has(c));
+
+    // (3) Remove deselected from row groups; destroy empty row charts
+    for (let i = this.rowGroups.length - 1; i >= 0; i--) {
+      const group = this.rowGroups[i];
+      group.countries = group.countries.filter((c) => selectedSet.has(c));
+      if (group.countries.length === 0) {
+        this.rowCharts.get(group.chartId)?.destroy();
+        this.rowCharts.delete(group.chartId);
+        this.rowGroups.splice(i, 1);
       }
     }
 
-    // (3) Rebuild shared color over full selection
-    this.colorFor = this.buildColorFor(selected);
-    this.combinedChart.colorFor = this.colorFor;
+    // (4) Add newly selected countries (not yet assigned to any chart) to main
+    const assigned = new Set([
+      ...this.mainGroup.countries,
+      ...this.rowGroups.flatMap((g) => g.countries),
+    ]);
+    for (const c of selected) {
+      if (!assigned.has(c)) this.mainGroup.countries.push(c);
+    }
 
-    // (4) Build the drag callbacks object to wire into each chart
+    // (5) Build drag callbacks
     const callbacks = this.buildCallbacks();
+    this.mainChart.callbacks = callbacks;
 
-    // Wire callbacks into combined chart
-    this.combinedChart.callbacks = callbacks;
-
-    // (5) Create rows for newly extracted countries; wire lens state/sync into each
-    for (const country of this.extractedCountries) {
-      if (!this.rows.has(country)) {
-        const chart = new SingleCountryChart(
+    // (6) Create/update row charts and re-append in group order
+    for (const group of this.rowGroups) {
+      let chart = this.rowCharts.get(group.chartId);
+      if (!chart) {
+        chart = new EmissionsChart(
+          group.chartId,
+          group.lensKey,
           this.rowContainer,
-          country,
+          group.countries,
           this.dataset,
-          this.metric,
-          this.colorFor,
           this.state,
         );
-        chart.callbacks = callbacks;
         chart.setLensState(this.lensState, this.lensSync);
-        this.rows.set(country, chart);
+        this.rowCharts.set(group.chartId, chart);
       }
+      chart.colorFor = this.colorFor;
+      chart.callbacks = callbacks;
+      chart.updateCountries(group.countries);
+      this.rowContainer.appendChild(chart.node());
     }
 
-    // (6) Re-append rows in extraction order; keep drop spacer last
-    for (const country of this.extractedCountries) {
-      const chart = this.rows.get(country);
-      if (chart) this.rowContainer.appendChild(chart.node());
-    }
-    // dropSpacer is appended to this.div (below rowContainer), already in correct position
-
-    // (7) Update year range on all single-country rows
-    const yearRange = this.state.yearRange();
-    const includeLUC = this.state.includeLandUseChange();
-    for (const chart of this.rows.values()) chart.update(yearRange, includeLUC);
-
-    // (8) Drive combined chart country list (after rows are updated so extraction is visible)
-    const combinedCountries = selected.filter((c) => !this.extractedCountries.includes(c));
-    this.combinedChart.updateCountries(combinedCountries);
+    // (7) Update main chart country list (drives re-render via updateCountries → update)
+    this.mainChart.colorFor = this.colorFor;
+    this.mainChart.updateCountries(this.mainGroup.countries);
   }
 
   // ---------------------------------------------------------------------------
@@ -185,11 +203,10 @@ export class ChartArea {
   }
 
   // ---------------------------------------------------------------------------
-  // Ghost badge lifecycle (adapted from lens-drag-sweeper.ts)
+  // Ghost badge lifecycle
   // ---------------------------------------------------------------------------
 
   private handleDragStart(country: string, x: number, y: number): void {
-    // Create ghost pill badge — textContent only (T-02-01 XSS)
     this.ghost = document.createElement('div');
     this.ghost.className = 'line-ghost';
     this.ghost.textContent = country;
@@ -197,7 +214,6 @@ export class ChartArea {
     document.body.appendChild(this.ghost);
     document.body.classList.add('line-dragging');
     this.positionGhost(x, y);
-
     document.addEventListener('keydown', this.onEscape);
   }
 
@@ -213,7 +229,6 @@ export class ChartArea {
   }
 
   private cancelDrag(): void {
-    // Escape: clean up without any state mutation (no state change, no reconcile)
     this.cleanupDrag();
   }
 
@@ -235,24 +250,19 @@ export class ChartArea {
   }
 
   // ---------------------------------------------------------------------------
-  // Drop target detection (elementFromPoint + closest)
+  // Drop target detection
   // ---------------------------------------------------------------------------
 
   private dropTargetAt(x: number, y: number): DropTarget {
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
     if (!el) return { kind: 'new-row' };
 
-    // Check combined first — combined root has both .combined-chart and .chart-area__row
-    const combined = el.closest<HTMLElement>('.combined-chart');
-    if (combined) return { kind: 'combined' };
-
-    // Check single-country row (has data-country attribute)
-    const row = el.closest<HTMLElement>('.chart-area__row');
-    if (row && row.dataset.country) {
-      return { kind: 'single-row', country: row.dataset.country };
+    const chartEl = el.closest<HTMLElement>('.emissions-chart');
+    if (chartEl) {
+      const chartId = chartEl.dataset.chartId ?? MAIN_CHART_ID;
+      return { kind: 'chart', chartId };
     }
 
-    // Spacer, gap between rows, or anywhere else within the chart area → extract as new row
     if (el.closest<HTMLElement>('.chart-area')) return { kind: 'new-row' };
 
     return { kind: 'invalid' };
@@ -263,21 +273,13 @@ export class ChartArea {
     const el = document.elementFromPoint(x, y) as HTMLElement | null;
     if (!el) return;
 
-    const combined = el.closest<HTMLElement>('.combined-chart');
-    if (combined) {
-      combined.classList.add('chart-area__row--drop');
-      this.prevDropEl = combined;
+    const chartEl = el.closest<HTMLElement>('.emissions-chart');
+    if (chartEl) {
+      chartEl.classList.add('chart-area__row--drop');
+      this.prevDropEl = chartEl;
       return;
     }
 
-    const row = el.closest<HTMLElement>('.chart-area__row');
-    if (row && row.dataset.country) {
-      row.classList.add('chart-area__row--drop');
-      this.prevDropEl = row;
-      return;
-    }
-
-    // Hovering over spacer, gap, or anywhere else within the chart area → highlight spacer
     if (el.closest<HTMLElement>('.chart-area')) {
       this.dropSpacer.classList.add('chart-area__drop-spacer--drop');
       this.prevDropEl = this.dropSpacer;
@@ -298,42 +300,50 @@ export class ChartArea {
   private applyDropOutcome(country: string, target: DropTarget): void {
     switch (target.kind) {
       case 'new-row': {
-        // DRAG-01: drag to spacer → extract into own row
-        if (!this.extractedCountries.includes(country)) {
-          this.extractedCountries.push(country);
-          this.reconcile();
-        }
+        // Remove country from wherever it is; create a new single-country row chart
+        this.removeFromSource(country);
+        const newChartId = `__row-${_rowCounter++}__`;
+        this.rowGroups.push({ chartId: newChartId, lensKey: country, countries: [country] });
+        this.reconcile();
         break;
       }
-      case 'combined': {
-        // D-12: return to combined chart
-        const idx = this.extractedCountries.indexOf(country);
-        if (idx !== -1) {
-          this.extractedCountries.splice(idx, 1);
-          this.reconcile();
-        }
-        break;
-      }
-      case 'single-row': {
-        // DRAG-02: move to extracted (as its own row), reorder adjacent to target
-        if (target.country === country) break; // drop on own row — no-op
-        if (!this.extractedCountries.includes(country)) {
-          this.extractedCountries.push(country);
-        }
-        // Reorder: place country adjacent to target
-        const targetIdx = this.extractedCountries.indexOf(target.country);
-        const dragIdx = this.extractedCountries.indexOf(country);
-        if (targetIdx !== -1 && dragIdx !== -1 && dragIdx !== targetIdx) {
-          this.extractedCountries.splice(dragIdx, 1);
-          const newTargetIdx = this.extractedCountries.indexOf(target.country);
-          this.extractedCountries.splice(newTargetIdx + 1, 0, country);
+      case 'chart': {
+        const { chartId } = target;
+        // Find current source group
+        const sourceGroup = this.findGroupOf(country);
+        if (!sourceGroup) break; // not found — no-op
+        if (sourceGroup.chartId === chartId) break; // dropped on own chart — no-op
+
+        // Move country to target chart
+        this.removeFromSource(country);
+        const targetGroup = this.findGroupById(chartId);
+        if (targetGroup) {
+          if (!targetGroup.countries.includes(country)) targetGroup.countries.push(country);
+        } else if (chartId === MAIN_CHART_ID) {
+          if (!this.mainGroup.countries.includes(country)) this.mainGroup.countries.push(country);
         }
         this.reconcile();
         break;
       }
       case 'invalid':
-        // No state change on invalid drop
         break;
     }
+  }
+
+  private removeFromSource(country: string): void {
+    this.mainGroup.countries = this.mainGroup.countries.filter((c) => c !== country);
+    for (const group of this.rowGroups) {
+      group.countries = group.countries.filter((c) => c !== country);
+    }
+  }
+
+  private findGroupOf(country: string): ChartGroup | null {
+    if (this.mainGroup.countries.includes(country)) return this.mainGroup;
+    return this.rowGroups.find((g) => g.countries.includes(country)) ?? null;
+  }
+
+  private findGroupById(chartId: string): ChartGroup | null {
+    if (chartId === MAIN_CHART_ID) return this.mainGroup;
+    return this.rowGroups.find((g) => g.chartId === chartId) ?? null;
   }
 }

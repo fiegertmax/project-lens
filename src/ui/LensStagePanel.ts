@@ -10,14 +10,10 @@ import { createLensDragSweeper } from './lens-drag-sweeper';
 /** The three stage numbers in display order. */
 const STAGES: readonly LensStage[] = [1, 2, 3];
 
-/** Returns the lens drop target under (x, y): a single-country chart OR the combined chart. */
+/** Returns the emissions chart element under (x, y), if any. */
 function lensDropTargetAt(x: number, y: number): HTMLElement | null {
   const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  return (
-    el?.closest<HTMLElement>('.single-country-chart[data-country]') ??
-    el?.closest<HTMLElement>('.combined-chart') ??
-    null
-  );
+  return el?.closest<HTMLElement>('.emissions-chart') ?? null;
 }
 
 /** Sidebar panel: three progressively-revealed stage icons with paired remove buttons,
@@ -89,12 +85,8 @@ export class LensStagePanel {
         return el;
       },
       onHover: (target, previous) => {
-        previous?.classList.remove('single-country-chart--drop', 'combined-chart--drop');
-        target?.classList.add(
-          target.classList.contains('combined-chart')
-            ? 'combined-chart--drop'
-            : 'single-country-chart--drop',
-        );
+        previous?.classList.remove('emissions-chart--drop');
+        target?.classList.add('emissions-chart--drop');
       },
       // Place on each chart swept over while Shift is held
       onSweep: (target) => this.placeOn(target, stage, true),
@@ -104,7 +96,7 @@ export class LensStagePanel {
 
   private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean): void {
     if (!chartEl) return;
-    const key = chartEl.dataset.country ?? COMBINED_CHART_KEY;
+    const key = chartEl.dataset.lensKey ?? COMBINED_CHART_KEY;
     // If a lens of this stage already exists elsewhere, inherit its boundaries so
     // the new lens starts in sync with its peers (drag/zoom moves all together).
     const sibling = this.state.allLenses().find(({ lens }) => lens.stage === stage);
