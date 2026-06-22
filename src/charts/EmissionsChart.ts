@@ -23,8 +23,6 @@ import { SlopeChart } from './SlopeChart';
 import { GdpSlopeChart } from './GdpSlopeChart';
 import { LensScatterPlot } from './LensScatterPlot';
 import { CrosshairOverlay } from './CrosshairOverlay';
-import { ToggleSwitch } from '../ui/ToggleSwitch';
-import { InfoTip } from '../ui/InfoTip';
 import { crossCountrySum } from '../utils/crossCountryMean';
 import type { StagedLensWindow } from './slope-types';
 
@@ -76,11 +74,6 @@ export class EmissionsChart {
   private readonly plot: SvgGroup;
   private readonly crosshair: CrosshairOverlay;
 
-  // Slope header with weighted-mean toggle (multi + absolute mode only)
-  private readonly slopeHeader: Selection<HTMLDivElement, unknown, null, undefined>;
-  private readonly weightedToggle: ToggleSwitch;
-  private useWeightedMean = false;
-
   // Sub-charts — all appended to slopeCell, visibility controlled via display style
   private readonly singleSlopeChart: SlopeChart;   // single + absolute
   private readonly gdpSlopeChart: GdpSlopeChart;   // single + per-capita
@@ -125,28 +118,6 @@ export class EmissionsChart {
     this.svg = this.lineCell.append('svg').attr('class', 'emissions-chart__svg');
     this.plot = this.svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
     this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.emissions-line-hit');
-
-    // Slope header with weighted toggle — CSS shows only in multi mode
-    this.slopeHeader = this.slopeCell.append('div').attr('class', 'emissions-chart__slope-header');
-    this.weightedToggle = new ToggleSwitch(this.slopeHeader.node()!, true);
-    this.weightedToggle.set({ checked: false, disabled: false, label: 'Simple mean' });
-    new InfoTip(
-      this.slopeHeader.node()!,
-      'Simple mean: each visible country contributes equally to the average.\n\nWeighted mean: each country\'s contribution is scaled by its total emissions over the selected year range.',
-      'Mean type explanation',
-    );
-    this.weightedToggle.onChange(() => {
-      this.useWeightedMean = this.weightedToggle.checked();
-      this.weightedToggle.set({
-        checked: this.useWeightedMean,
-        disabled: false,
-        label: this.useWeightedMean ? 'Weighted mean' : 'Simple mean',
-      });
-      const lenses = this.lensState?.lensesFor(this.lensKey) ?? [];
-      if (lenses.length > 0 && this.state.metricMode() !== 'per-capita' && this.isMulti()) {
-        this.renderSlopeMulti(lenses);
-      }
-    });
 
     this.singleSlopeChart = new SlopeChart(this.slopeCell.node()!, dataset);
     this.gdpSlopeChart = new GdpSlopeChart(this.slopeCell.node()!, dataset);
@@ -287,7 +258,6 @@ export class EmissionsChart {
       this.multiSlopeChart.clear();
       this.scatterPlot.node().style.display = 'none';
       this.scatterPlot.clear();
-      this.slopeHeader.style('display', 'none');
 
       if (perCapita) {
         this.singleSlopeChart.node().style.display = 'none';
@@ -317,13 +287,11 @@ export class EmissionsChart {
       if (perCapita) {
         this.multiSlopeChart.node().style.display = 'none';
         this.multiSlopeChart.clear();
-        this.slopeHeader.style('display', 'none');
         this.scatterPlot.node().style.display = '';
         this.scatterPlot.render(this.countries, lenses, includeLUC, this.resolveColor());
       } else {
         this.scatterPlot.node().style.display = 'none';
         this.scatterPlot.clear();
-        this.slopeHeader.style('display', null);
         this.multiSlopeChart.node().style.display = '';
         this.renderSlopeMulti(lenses);
       }
@@ -346,7 +314,6 @@ export class EmissionsChart {
     this.gdpSlopeChart.clear();
     this.multiSlopeChart.clear();
     this.scatterPlot.clear();
-    this.slopeHeader.style('display', null);
   }
 
   private renderAxes(

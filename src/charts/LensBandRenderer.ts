@@ -122,7 +122,7 @@ function makeLensDragLocal(
     })
     .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
       const delta = ev.dx * yearsPerPixel;
-      opts.lensSync.moveLinkedLens(opts.key, d.id, delta);
+      opts.lensSync.moveLinkedLens(opts.key, d.id, delta, opts.yearRange);
       // Update band position live for immediate visual feedback
       const updatedLenses = opts.lensState.lensesFor(opts.key);
       const updated = updatedLenses.find((l) => l.id === d.id);
@@ -162,6 +162,6 @@ function handleLensWheelLocal(
     LENS_STAGE_WIDTH.max,
     Math.max(LENS_STAGE_WIDTH.min, currentSpan + step),
   );
-  opts.lensSync.resizeLinkedLens(opts.key, lens.id, newSpan);
+  opts.lensSync.resizeLinkedLens(opts.key, lens.id, newSpan, opts.yearRange);
   opts.onChange?.();
 }

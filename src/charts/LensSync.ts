@@ -19,31 +19,33 @@ export class LensSync {
    * Moves the origin lens by deltaYears. If the origin is linked, fans the same
    * delta to every other linked lens of the same stage. Sibling conflicts are
    * silently skipped (CountryLensState.moveLens returns false) — all other
-   * valid siblings and the origin still move.
+   * valid siblings and the origin still move. yearRange is forwarded for
+   * boundary clamping so lenses cannot be dragged outside the chart.
    */
-  moveLinkedLens(originCountry: string, originId: string, deltaYears: number): void {
+  moveLinkedLens(originCountry: string, originId: string, deltaYears: number, yearRange?: [number, number]): void {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    this.state.moveLens(originCountry, originId, deltaYears);
+    this.state.moveLens(originCountry, originId, deltaYears, yearRange);
 
     for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
-      this.state.moveLens(country, lens.id, deltaYears);
+      this.state.moveLens(country, lens.id, deltaYears, yearRange);
     }
   }
 
   /**
    * Resizes the origin lens to newSpan and fans the same span to every other
-   * lens of the same stage across all countries.
+   * lens of the same stage across all countries. yearRange is forwarded so
+   * boundary-aware clamping can anchor at chart edges instead of overflowing.
    */
-  resizeLinkedLens(originCountry: string, originId: string, newSpan: number): void {
+  resizeLinkedLens(originCountry: string, originId: string, newSpan: number, yearRange?: [number, number]): void {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    this.state.resizeLens(originCountry, originId, newSpan);
+    this.state.resizeLens(originCountry, originId, newSpan, yearRange);
 
     for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
-      this.state.resizeLens(country, lens.id, newSpan);
+      this.state.resizeLens(country, lens.id, newSpan, yearRange);
     }
   }
 

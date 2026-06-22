@@ -121,9 +121,8 @@ export class SlopeChart {
   }
 
   /**
-   * Render path for pre-computed cross-country means. A separate method is needed because
-   * values cannot be looked up from a single country — they are already aggregated by the
-   * caller (crossCountryMean). Reuses all existing render helpers unchanged.
+   * Render path for pre-aggregated (summed) cross-country values. A separate method is
+   * needed because values cannot be looked up from a single country.
    */
   renderAggregated(lenses: AggregatedLensWindow[], yDomain?: [number, number]): void {
     if (lenses.length === 0) {

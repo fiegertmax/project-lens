@@ -99,20 +99,35 @@ export class CountryLensState {
   }
 
   /**
-   * Shifts the lens by deltaYears. Rejected without notify if the shifted window
-   * would overlap another lens on the same country.
+   * Shifts the lens by deltaYears. When yearRange is provided, clamps the result so
+   * startYear >= yearRange[0] and endYear <= yearRange[1].
+   * Rejected without notify if the shifted window would overlap another lens.
    */
-  moveLens(country: string, id: string, deltaYears: number): boolean {
+  moveLens(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
     const lenses = this.byCountry.get(country);
     if (!lenses) return false;
     const idx = lenses.findIndex(l => l.id === id);
     if (idx === -1) return false;
 
     const lens = lenses[idx];
+    const span = lens.endYear - lens.startYear;
+    let newStart = Math.round(lens.startYear + deltaYears);
+    let newEnd = Math.round(lens.endYear + deltaYears);
+
+    if (yearRange) {
+      if (newStart < yearRange[0]) {
+        newStart = yearRange[0];
+        newEnd = yearRange[0] + span;
+      } else if (newEnd > yearRange[1]) {
+        newEnd = yearRange[1];
+        newStart = yearRange[1] - span;
+      }
+    }
+
     const moved: PlacedLens = {
       ...lens,
-      startYear: Math.round(lens.startYear + deltaYears),
-      endYear: Math.round(lens.endYear + deltaYears),
+      startYear: newStart,
+      endYear: newEnd,
     };
     const others = lenses.filter(l => l.id !== id);
     if (others.some(l => this.overlaps(moved, l))) return false;
@@ -125,10 +140,11 @@ export class CountryLensState {
 
   /**
    * Resizes a lens by setting endYear = startYear + clamp(newSpan, min, max).
-   * Anchor: startYear is kept fixed; only endYear changes.
+   * When yearRange is provided: if the new endYear would exceed yearRange[1], anchors
+   * endYear at the boundary and extends startYear left instead (and vice-versa at yearRange[0]).
    * Rejected without notify if the resized window would overlap another lens.
    */
-  resizeLens(country: string, id: string, newSpan: number): boolean {
+  resizeLens(country: string, id: string, newSpan: number, yearRange?: [number, number]): boolean {
     const lenses = this.byCountry.get(country);
     if (!lenses) return false;
     const idx = lenses.findIndex(l => l.id === id);
@@ -136,7 +152,23 @@ export class CountryLensState {
 
     const lens = lenses[idx];
     const clamped = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, newSpan));
-    const resized: PlacedLens = { ...lens, endYear: lens.startYear + clamped };
+
+    let newStartYear = lens.startYear;
+    let newEndYear = lens.startYear + clamped;
+
+    if (yearRange) {
+      if (newEndYear > yearRange[1]) {
+        // Right boundary hit: anchor endYear, extend startYear left
+        newEndYear = yearRange[1];
+        newStartYear = Math.max(yearRange[0], yearRange[1] - clamped);
+      } else if (newStartYear < yearRange[0]) {
+        // Left boundary hit: anchor startYear, extend endYear right
+        newStartYear = yearRange[0];
+        newEndYear = Math.min(yearRange[1], yearRange[0] + clamped);
+      }
+    }
+
+    const resized: PlacedLens = { ...lens, startYear: newStartYear, endYear: newEndYear };
     const others = lenses.filter(l => l.id !== id);
     if (others.some(l => this.overlaps(resized, l))) return false;
 
