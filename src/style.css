@@ -1621,6 +1621,24 @@ body.line-dragging {
   display: none;
 }
 
+/* Magnifying-glass handle: thick rounded bar from lens ring toward bottom-right. */
+.world-map__lens-handle-bar {
+  stroke: var(--lens);
+  stroke-width: 14;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: grab;
+  filter: drop-shadow(1px 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.world-map__lens-handle-bar:active {
+  cursor: grabbing;
+}
+
+.world-map__lens-handle-bar--hidden {
+  display: none;
+}
+
 /* Transparent grab band on the lens edge — interior stays free for selection. */
 .world-map__lens-grip {
   fill: none;

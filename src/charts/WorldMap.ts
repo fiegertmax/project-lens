@@ -9,6 +9,8 @@ import { LENS_ICON } from '../ui/icons';
 
 const VIEW = { width: 960, height: 480 } as const;
 const LENS = { radius: 150, distortion: 4 } as const;
+const HANDLE = { length: 72, cos45: Math.SQRT2 / 2 } as const;
+const DISTORTION = { min: 1, max: 10 } as const;
 
 /** Per-country resolution against the dataset, computed once on render. */
 interface CountryDatum {
@@ -29,6 +31,7 @@ export class WorldMap {
   private readonly basePath: GeoPath;
   private readonly paths: Selection<SVGPathElement, CountryDatum, SVGGElement, unknown>;
   private readonly lensRing: Selection<SVGCircleElement, unknown, null, undefined>;
+  private readonly lensHandle: Selection<SVGLineElement, unknown, null, undefined>;
   private readonly lensGrip: Selection<SVGCircleElement, unknown, null, undefined>;
   private readonly label: HTMLDivElement;
   private readonly removeButton: HTMLButtonElement;
@@ -36,6 +39,7 @@ export class WorldMap {
   private lensActive = false;
   private lensFocus: [number, number] = [0, 0];
   private dragging = false;
+  private distortion: number = LENS.distortion;
 
   constructor(container: HTMLElement, dataset: EmissionsDataset, state: AppState, features: CountryFeature[]) {
     this.dataset = dataset;
@@ -51,6 +55,8 @@ export class WorldMap {
       .attr('viewBox', `0 0 ${VIEW.width} ${VIEW.height}`)
       .attr('preserveAspectRatio', 'xMidYMid meet');
     this.svgEl = svg.node() as SVGSVGElement;
+    // passive: false lets us preventDefault to block page scroll while zooming the lens.
+    this.svgEl.addEventListener('wheel', (ev) => this.onLensWheel(ev), { passive: false });
 
     this.paths = svg
       .append('g')
@@ -67,6 +73,12 @@ export class WorldMap {
       .append('circle')
       .attr('class', 'world-map__lens-ring world-map__lens-ring--hidden')
       .attr('r', LENS.radius);
+
+    // Handle stem: thick rounded line from the ring edge at 45° toward bottom-right.
+    this.lensHandle = svg
+      .append('line')
+      .attr('class', 'world-map__lens-handle-bar world-map__lens-handle-bar--hidden')
+      .on('pointerdown', (event: PointerEvent) => this.onLensGrab(event));
 
     // Transparent grab band on the lens boundary: lets the user pick the placed
     // lens up and move it, while the interior stays free for country selection.
@@ -164,7 +176,14 @@ export class WorldMap {
     for (const ring of [this.lensRing, this.lensGrip]) {
       ring.attr('cx', focus[0]).attr('cy', focus[1]);
     }
+    const edgeX = focus[0] + LENS.radius * HANDLE.cos45;
+    const edgeY = focus[1] + LENS.radius * HANDLE.cos45;
+    this.lensHandle
+      .attr('x1', edgeX).attr('y1', edgeY)
+      .attr('x2', edgeX + HANDLE.length * HANDLE.cos45)
+      .attr('y2', edgeY + HANDLE.length * HANDLE.cos45);
     this.lensRing.classed('world-map__lens-ring--hidden', false);
+    this.lensHandle.classed('world-map__lens-handle-bar--hidden', false);
     this.lensGrip.classed('world-map__lens-grip--hidden', false);
     this.removeButton.classList.remove('world-map__lens-remove--hidden');
     this.redraw();
@@ -172,9 +191,27 @@ export class WorldMap {
 
   private deactivateLens(): void {
     this.lensActive = false;
+    this.distortion = LENS.distortion;
+    this.fisheye.distortion(this.distortion);
     this.lensRing.classed('world-map__lens-ring--hidden', true);
+    this.lensHandle.classed('world-map__lens-handle-bar--hidden', true);
     this.lensGrip.classed('world-map__lens-grip--hidden', true);
     this.removeButton.classList.add('world-map__lens-remove--hidden');
+    this.redraw();
+  }
+
+  /** Ctrl/Cmd+wheel (or trackpad pinch) over the map adjusts magnification depth.
+   *  Scroll up = more zoom; scroll down = less. Radius stays fixed. */
+  private onLensWheel(ev: WheelEvent): void {
+    if (!this.lensActive) return;
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    ev.preventDefault();
+    // Normalize pixel/line/page deltaMode so the step feels consistent.
+    const pixelDelta = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaMode === 2 ? ev.deltaY * 400 : ev.deltaY;
+    // Positive deltaY = scroll down = more magnification.
+    const next = Math.min(DISTORTION.max, Math.max(DISTORTION.min, this.distortion - pixelDelta * 0.03));
+    this.distortion = next;
+    this.fisheye.distortion(next);
     this.redraw();
   }
 
