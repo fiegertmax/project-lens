@@ -1,20 +1,15 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-import type { AppState, BaseVisualizationTab, YearRange } from '../state/AppState';
+import type { AppState, YearRange } from '../state/AppState';
 import type { CountryLensState } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
-import { ContinentFocusSelector } from './ContinentFocusSelector';
 import { CountrySelector } from './CountrySelector';
 import { InfoTip } from './InfoTip';
-import { Tabs } from './Tabs';
 import { ToggleSwitch } from './ToggleSwitch';
-import { VizModeSelector } from './VizModeSelector';
 import { WorldMapModal } from './WorldMapModal';
 import { YearRangeSlider } from './YearRangeSlider';
-import { YearSelector } from './YearSelector';
 import { GLOBE_ICON } from './icons';
 
-/** Minimizable panel holding the (also minimizable) configuration controls,
- *  one tab per base visualization. */
+/** Minimizable panel holding the (also minimizable) configuration controls. */
 export class ConfigPanel {
   constructor(
     parent: HTMLElement,
@@ -24,36 +19,15 @@ export class ConfigPanel {
     lensState: CountryLensState,
   ) {
     const panel = new Collapsible(parent, 'Base Visualization', 'config-panel');
+    const body = panel.body;
 
-    new Tabs(
-      panel.body,
-      [
-        {
-          id: 'by-country',
-          label: 'Emissions by Country',
-          render: (body) => {
-            const timeSpan = new Collapsible(body, 'Time span', 'config-section');
-            new YearRangeSlider(timeSpan.body, state, yearBounds);
-            const countries = new Collapsible(body, 'Countries', 'config-section');
-            this.buildWorldMapButton(countries, dataset, state);
-            new CountrySelector(countries.body, dataset.countries(), state);
-            this.buildLucToggle(body, state);
-            this.buildPerCapitaToggle(body, state, lensState);
-          },
-        },
-        {
-          id: 'global',
-          label: 'Global emissions',
-          render: (body) => {
-            new VizModeSelector(body, state);
-            new YearSelector(body, state, yearBounds);
-            new ContinentFocusSelector(body, state);
-          },
-        },
-      ],
-      state.activeTab(),
-      (id) => state.setActiveTab(id as BaseVisualizationTab),
-    );
+    const timeSpan = new Collapsible(body, 'Time span', 'config-section');
+    new YearRangeSlider(timeSpan.body, state, yearBounds);
+    const countries = new Collapsible(body, 'Countries', 'config-section');
+    this.buildWorldMapButton(countries, dataset, state);
+    new CountrySelector(countries.body, dataset.countries(), state);
+    this.buildLucToggle(body, state);
+    this.buildPerCapitaToggle(body, state, lensState);
   }
 
   /** Globe button in the Countries header that opens the quick-select map. */

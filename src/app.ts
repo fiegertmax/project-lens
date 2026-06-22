@@ -1,11 +1,7 @@
 import { ChartArea } from './charts/ChartArea';
-import { PieChart } from './charts/PieChart';
-import { PieLensManager } from './charts/PieLensManager';
-import { SankeyChart } from './charts/SankeyChart';
 import {
   DATA_URL,
   DEFAULT_COUNTRIES,
-  DEFAULT_GLOBAL_YEAR,
   DEFAULT_METRIC,
   DEFAULT_YEAR_RANGE,
   EXTRA_COLUMNS,
@@ -14,13 +10,10 @@ import { EmissionsDataset } from './data/EmissionsDataset';
 import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
 import { CountryLensState } from './state/CountryLensState';
-import { PieLensState } from './state/PieLensState';
 import { AiResearchState } from './state/AiResearchState';
 import { ConfigPanel } from './ui/ConfigPanel';
 import { LensStagePanel } from './ui/LensStagePanel';
 import { AiResearchPanel } from './ui/AiResearchPanel';
-import { PieLensPanel } from './ui/PieLensPanel';
-import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
 export class App {
@@ -36,18 +29,16 @@ export class App {
 
     const bounds = this.clampBounds(dataset.yearExtent());
     const range = this.clampRange(bounds);
-    const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
-    const pieLens = new PieLensState();
+    const state = new AppState(DEFAULT_COUNTRIES, range);
     const lensState = new CountryLensState();
     const aiResearch = new AiResearchState();
 
-    this.render(dataset, state, pieLens, lensState, aiResearch, bounds);
+    this.render(dataset, state, lensState, aiResearch, bounds);
   }
 
   private render(
     dataset: EmissionsDataset,
     state: AppState,
-    pieLens: PieLensState,
     lensState: CountryLensState,
     aiResearch: AiResearchState,
     bounds: YearRange,
@@ -64,44 +55,15 @@ export class App {
     new ConfigPanel(sidebar, dataset, state, bounds, lensState);
     new LensStagePanel(sidebar, lensState, state, dataset);
     const aiResearchPanel = new AiResearchPanel(sidebar, aiResearch, dataset);
-    const sankeyLensPanel = new SankeyLensPanel(sidebar);
     const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState, aiResearch);
-    const sankey = new SankeyChart(main, dataset);
-    const pie = new PieChart(main, dataset);
-    const pieManager = new PieLensManager({
-      overlay: pie.overlay(),
-      chartRoot: pie.node(),
-      state: pieLens,
-      dataset,
-      getYear: () => state.globalYear(),
-    });
-    const pieLensPanel = new PieLensPanel(sidebar, pieLens, pieManager, pie.overlay());
 
     const syncView = (): void => {
-      const isByCountry = state.activeTab() === 'by-country';
-      const isGlobalSankey = !isByCountry && state.globalVizMode() === 'sankey';
-      const isGlobalPie = !isByCountry && state.globalVizMode() === 'pie';
       // AI research only makes sense on the absolute "find reasons" view.
-      const isAbsoluteByCountry = isByCountry && state.metricMode() === 'absolute';
+      const isAbsolute = state.metricMode() === 'absolute';
+      aiResearchPanel.root.style.display = isAbsolute ? '' : 'none';
+      if (!isAbsolute) aiResearch.cancelSelection();
 
-      charts.node().style.display = isByCountry ? '' : 'none';
-      sankey.node().style.display = isGlobalSankey ? '' : 'none';
-      pie.node().style.display = isGlobalPie ? '' : 'none';
-      sankeyLensPanel.root.style.display = isGlobalSankey ? '' : 'none';
-      pieLensPanel.root.style.display = isGlobalPie ? '' : 'none';
-      aiResearchPanel.root.style.display = isAbsoluteByCountry ? '' : 'none';
-
-      if (!isGlobalPie) pieLens.clear();
-      if (!isAbsoluteByCountry) aiResearch.cancelSelection();
-
-      if (isByCountry) charts.update();
-      else if (isGlobalSankey) {
-        sankey.update(state.globalYear(), state.focusedContinent());
-        sankeyLensPanel.update(state.focusedContinent() !== null);
-      } else {
-        pie.update(state.globalYear(), state.focusedContinent());
-        pieManager.redrawAll();
-      }
+      charts.update();
     };
 
     state.subscribe(syncView);
@@ -118,10 +80,5 @@ export class App {
   private clampRange(bounds: YearRange): YearRange {
     const [from, to] = DEFAULT_YEAR_RANGE;
     return [Math.max(from, bounds[0]), Math.min(to, bounds[1])];
-  }
-
-  /** Clamp the default global year inside the available bounds. */
-  private clampYear(year: number, [min, max]: YearRange): number {
-    return Math.min(Math.max(year, min), max);
   }
 }

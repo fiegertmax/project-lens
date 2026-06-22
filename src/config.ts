@@ -9,12 +9,6 @@ export const DEFAULT_COUNTRIES: readonly string[] = ['Germany'];
 /** Requested 1950–2025; the dataset ends at 2024, so the max is clamped on load. */
 export const DEFAULT_YEAR_RANGE: readonly [number, number] = [1950, 2025];
 
-/** Default single-year selection for the "Global emissions" Sankey view. */
-export const DEFAULT_GLOBAL_YEAR = 2020;
-
-/** Number of top-emitting countries shown individually per continent in the Sankey. */
-export const SANKEY_TOP_COUNTRIES = 3;
-
 /** Metric extension point: add entries here to expose new measures (OCP). */
 export const METRICS: Record<MetricKey, MetricDefinition> = {
   co2: {
@@ -51,7 +45,7 @@ export const EXTRA_COLUMNS: readonly string[] = [
   'land_use_change_co2',
 ];
 
-/** CO₂ source breakdown used by the focused-continent source lens. */
+/** CO₂ source breakdown used by the per-source slope chart. */
 export const CO2_SOURCES = [
   {
     key: 'coal_co2',

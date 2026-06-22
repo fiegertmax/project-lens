@@ -1,11 +1,5 @@
 export type YearRange = [number, number];
 
-/** Which base visualization is active in the main area. */
-export type BaseVisualizationTab = 'by-country' | 'global';
-
-/** Which sub-visualization is shown inside the "global" tab. */
-export type GlobalVizMode = 'sankey' | 'pie';
-
 /** Whether the primary line charts show absolute or per-capita emissions. */
 export type MetricMode = 'absolute' | 'per-capita';
 
@@ -15,18 +9,13 @@ type Listener = () => void;
 export class AppState {
   private readonly selected: Set<string>;
   private range: YearRange;
-  private tab: BaseVisualizationTab = 'by-country';
-  private year: number;
-  private focusContinent: string | null = null;
-  private vizMode: GlobalVizMode = 'sankey';
   private lucEnabled = true;
   private metric: MetricMode = 'per-capita';
   private readonly listeners = new Set<Listener>();
 
-  constructor(selectedCountries: Iterable<string>, yearRange: YearRange, globalYear: number) {
+  constructor(selectedCountries: Iterable<string>, yearRange: YearRange) {
     this.selected = new Set(selectedCountries);
     this.range = yearRange;
-    this.year = globalYear;
   }
 
   selectedCountries(): string[] {
@@ -50,46 +39,6 @@ export class AppState {
   setYearRange(range: YearRange): void {
     if (range[0] === this.range[0] && range[1] === this.range[1]) return;
     this.range = range;
-    this.notify();
-  }
-
-  activeTab(): BaseVisualizationTab {
-    return this.tab;
-  }
-
-  setActiveTab(tab: BaseVisualizationTab): void {
-    if (tab === this.tab) return;
-    this.tab = tab;
-    this.notify();
-  }
-
-  globalYear(): number {
-    return this.year;
-  }
-
-  setGlobalYear(year: number): void {
-    if (year === this.year) return;
-    this.year = year;
-    this.notify();
-  }
-
-  focusedContinent(): string | null {
-    return this.focusContinent;
-  }
-
-  setFocusedContinent(continent: string | null): void {
-    if (continent === this.focusContinent) return;
-    this.focusContinent = continent;
-    this.notify();
-  }
-
-  globalVizMode(): GlobalVizMode {
-    return this.vizMode;
-  }
-
-  setGlobalVizMode(mode: GlobalVizMode): void {
-    if (mode === this.vizMode) return;
-    this.vizMode = mode;
     this.notify();
   }
 
