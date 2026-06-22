@@ -161,7 +161,7 @@ export class AiResearchPanel {
     this.outputEl.replaceChildren(...this.renderBullets(text));
   }
 
-  /** Splits the model's markdown-ish bullet output into list items. */
+  /** Splits the model's markdown bullet output into list items with inline formatting. */
   private renderBullets(text: string): Node[] {
     if (!text) return [];
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -169,10 +169,44 @@ export class AiResearchPanel {
     list.className = 'ai-research-panel__list';
     for (const line of lines) {
       const li = document.createElement('li');
-      li.textContent = line.replace(/^[-*]\s*/, '');
+      // Strip the leading bullet marker only ("- "/"* "), never a "**bold" prefix.
+      this.appendInlineMarkdown(li, line.replace(/^[-*]\s+/, ''));
       list.appendChild(li);
     }
     return [list];
+  }
+
+  /**
+   * Renders inline markdown — bold, italic, and [label](url) links —
+   * as DOM nodes. Text is added via textContent (never innerHTML), so model output
+   * can't inject markup.
+   */
+  private appendInlineMarkdown(parent: HTMLElement, text: string): void {
+    const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)|(?:\*([^*]+)\*|_([^_]+)_)/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
+      const [, bold, linkLabel, linkUrl, italicStar, italicUnderscore] = match;
+      if (bold !== undefined) {
+        const strong = document.createElement('strong');
+        strong.textContent = bold;
+        parent.appendChild(strong);
+      } else if (linkLabel !== undefined) {
+        const a = document.createElement('a');
+        a.textContent = linkLabel;
+        a.href = linkUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        parent.appendChild(a);
+      } else {
+        const em = document.createElement('em');
+        em.textContent = (italicStar ?? italicUnderscore)!;
+        parent.appendChild(em);
+      }
+      last = pattern.lastIndex;
+    }
+    if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
   }
 
   private spinner(): HTMLElement {

@@ -1849,6 +1849,14 @@ body.line-dragging {
   color: var(--text);
 }
 
+.ai-research-panel__list strong {
+  font-weight: 700;
+}
+
+.ai-research-panel__list a {
+  color: var(--accent);
+}
+
 /* AI-research selection: highlight single-country slope charts as click targets */
 .slope-chart--selectable {
   cursor: pointer;
