@@ -130,6 +130,14 @@ export class ConfigPanel {
       state.setMetricMode(perCapita ? 'per-capita' : 'absolute');
     });
 
+    // Keep toggle in sync when metric mode changes programmatically (e.g. via slope chart click)
+    state.subscribe(() => {
+      const perCapita = state.metricMode() === 'per-capita';
+      if (toggle.checked() !== perCapita) {
+        toggle.set({ checked: perCapita, disabled: false, label: perCapita ? 'Per capita' : 'Absolute' });
+      }
+    });
+
     parent.appendChild(row);
   }
 }

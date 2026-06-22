@@ -293,6 +293,7 @@ export class EmissionsChart {
         this.singleSlopeChart.node().style.display = 'none';
         this.singleSlopeChart.clear();
         this.gdpSlopeChart.node().style.display = '';
+        this.gdpSlopeChart.onSwitchToAbsolute = () => this.state.setMetricMode('absolute');
         this.gdpSlopeChart.render(this.countries[0], lenses, includeLUC);
       } else {
         this.gdpSlopeChart.node().style.display = 'none';

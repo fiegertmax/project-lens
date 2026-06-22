@@ -1246,6 +1246,18 @@ body.line-dragging {
   font-size: 11px;
 }
 
+.gdp-slope-chart__tooltip {
+  position: fixed;
+  background: var(--text);
+  color: var(--bg);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  white-space: nowrap;
+}
+
 /* Lens scatterplot (combined chart, absolute emissions mode) */
 
 .lens-scatter-plot__svg {

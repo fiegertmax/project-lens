@@ -25,16 +25,24 @@ interface LensMetrics {
 
 /** Slope chart showing percent change in CO₂/cap and GDP/cap over each lens window. */
 export class GdpSlopeChart {
+  /** Set before render() to enable the "switch to absolute" interaction on colored areas. */
+  onSwitchToAbsolute?: () => void;
+
   private readonly dataset: EmissionsDataset;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
+  private readonly tooltip: Selection<HTMLDivElement, unknown, null, undefined>;
 
   constructor(parent: HTMLElement, dataset: EmissionsDataset) {
     this.dataset = dataset;
     this.root = select(parent).append('div').attr('class', 'gdp-slope-chart');
     this.svg = this.root.append('svg').attr('class', 'gdp-slope-chart__svg');
     this.plot = this.svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+    this.tooltip = select(document.body)
+      .append('div')
+      .attr('class', 'gdp-slope-chart__tooltip')
+      .style('display', 'none');
   }
 
   node(): HTMLDivElement {
@@ -42,6 +50,7 @@ export class GdpSlopeChart {
   }
 
   destroy(): void {
+    this.tooltip.remove();
     this.root.remove();
   }
 
@@ -167,9 +176,28 @@ export class GdpSlopeChart {
         const gdpEndY = y(m.gdpPct);
         const fill = decouplingColor(m.gdpPct, m.co2Pct);
         if (fill) {
-          g.append('path').attr('class', 'gdp-slope-chart__area')
+          const area = g.append('path').attr('class', 'gdp-slope-chart__area')
             .attr('d', `M${m.startX},${zeroY} L${m.endX},${gdpEndY} L${m.endX},${co2EndY} Z`)
-            .attr('fill', fill).attr('opacity', 0.18).attr('stroke', 'none');
+            .attr('fill', fill).attr('opacity', 0.18).attr('stroke', 'none')
+            .attr('cursor', 'pointer');
+          area
+            .on('mouseover', () => {
+              area.attr('opacity', 0.38);
+              this.tooltip.style('display', 'block').text('find reasons');
+            })
+            .on('mousemove', (event: MouseEvent) => {
+              this.tooltip
+                .style('left', `${event.clientX + 14}px`)
+                .style('top', `${event.clientY - 32}px`);
+            })
+            .on('mouseout', () => {
+              area.attr('opacity', 0.18);
+              this.tooltip.style('display', 'none');
+            })
+            .on('click', () => {
+              this.tooltip.style('display', 'none');
+              this.onSwitchToAbsolute?.();
+            });
         }
       }
 
