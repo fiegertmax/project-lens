@@ -15,8 +15,10 @@ import { AppState } from './state/AppState';
 import type { YearRange } from './state/AppState';
 import { CountryLensState } from './state/CountryLensState';
 import { PieLensState } from './state/PieLensState';
+import { AiResearchState } from './state/AiResearchState';
 import { ConfigPanel } from './ui/ConfigPanel';
 import { LensStagePanel } from './ui/LensStagePanel';
+import { AiResearchPanel } from './ui/AiResearchPanel';
 import { PieLensPanel } from './ui/PieLensPanel';
 import { SankeyLensPanel } from './ui/SankeyLensPanel';
 
@@ -37,8 +39,9 @@ export class App {
     const state = new AppState(DEFAULT_COUNTRIES, range, this.clampYear(DEFAULT_GLOBAL_YEAR, bounds));
     const pieLens = new PieLensState();
     const lensState = new CountryLensState();
+    const aiResearch = new AiResearchState();
 
-    this.render(dataset, state, pieLens, lensState, bounds);
+    this.render(dataset, state, pieLens, lensState, aiResearch, bounds);
   }
 
   private render(
@@ -46,6 +49,7 @@ export class App {
     state: AppState,
     pieLens: PieLensState,
     lensState: CountryLensState,
+    aiResearch: AiResearchState,
     bounds: YearRange,
   ): void {
     this.root.innerHTML = '';
@@ -59,8 +63,9 @@ export class App {
 
     new ConfigPanel(sidebar, dataset, state, bounds, lensState);
     new LensStagePanel(sidebar, lensState, state, dataset);
+    const aiResearchPanel = new AiResearchPanel(sidebar, aiResearch, dataset);
     const sankeyLensPanel = new SankeyLensPanel(sidebar);
-    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState);
+    const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState, aiResearch);
     const sankey = new SankeyChart(main, dataset);
     const pie = new PieChart(main, dataset);
     const pieManager = new PieLensManager({
@@ -76,14 +81,18 @@ export class App {
       const isByCountry = state.activeTab() === 'by-country';
       const isGlobalSankey = !isByCountry && state.globalVizMode() === 'sankey';
       const isGlobalPie = !isByCountry && state.globalVizMode() === 'pie';
+      // AI research only makes sense on the absolute "find reasons" view.
+      const isAbsoluteByCountry = isByCountry && state.metricMode() === 'absolute';
 
       charts.node().style.display = isByCountry ? '' : 'none';
       sankey.node().style.display = isGlobalSankey ? '' : 'none';
       pie.node().style.display = isGlobalPie ? '' : 'none';
       sankeyLensPanel.root.style.display = isGlobalSankey ? '' : 'none';
       pieLensPanel.root.style.display = isGlobalPie ? '' : 'none';
+      aiResearchPanel.root.style.display = isAbsoluteByCountry ? '' : 'none';
 
       if (!isGlobalPie) pieLens.clear();
+      if (!isAbsoluteByCountry) aiResearch.cancelSelection();
 
       if (isByCountry) charts.update();
       else if (isGlobalSankey) {

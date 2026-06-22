@@ -97,6 +97,56 @@ export const CO2_SOURCES = [
   },
 ] as const;
 
+/**
+ * AI trend research config (absolute-emissions "AI research" panel).
+ * The prompt lives here as a dynamic few-shot template: a fixed system prompt plus one
+ * worked example, with the per-country factor list injected at call time (see researchPrompt.ts).
+ * Haiku is mandated for all web research per the feature spec.
+ */
+export const AI_RESEARCH = {
+  /** Web research must run on Haiku. */
+  model: 'claude-haiku-4-5',
+  /** Keeps the answer short (a handful of bullets). */
+  maxTokens: 900,
+  /** Changes smaller than this (|%|) are treated as noise and never researched. */
+  minChangePct: 5,
+  /** Server-side web search tool — older version chosen for Haiku compatibility. */
+  webSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+
+  system: [
+    'You are an expert climate-data research assistant embedded in a CO₂ emissions visualization.',
+    "A user is inspecting how ONE country's absolute CO₂ emissions changed over a specific period, broken down by source.",
+    'Your job: explain WHY the emissions changed, grounded in real, verifiable events.',
+    '',
+    'Rules:',
+    '- Use web search to find real, country-specific causes (policies, power-plant openings/closures, economic shifts, wars, deforestation programs, political changes, etc.).',
+    "- Only discuss the emission factors listed in the user's message. Never introduce factors that are not on display.",
+    '- Tie each point to a concrete year or short year range inside the period.',
+    '- Prefer country-specific causes (named governments, regions, industries, rainforests, parties).',
+    '- Ignore minor fluctuations: only explain changes of roughly 5% or more.',
+    '- Keep it short: 3–6 concise bullet points, one cause each. No intro or closing paragraph.',
+    '- Each bullet ≤ 2 sentences and starts with the relevant year(s) in brackets, e.g. "[2011–2013]".',
+    '- If you are genuinely unsure, say so briefly rather than inventing specifics.',
+  ].join('\n'),
+
+  // One worked example pins the output format; the real request reuses the same shape.
+  exampleUser: [
+    'Country: Examplia',
+    'Period: 2000–2015',
+    'Land use change: excluded',
+    'Factors that changed materially on the chart:',
+    '- Coal: +38%',
+    '- Oil: -12%',
+    '- Cement: +120%',
+    'Research the real-world causes behind these changes.',
+  ].join('\n'),
+  exampleAssistant: [
+    "- [2001–2007] Examplia's coal use climbed as three new lignite power stations in the eastern Karst region came online to meet booming industrial demand.",
+    '- [2004 onward] A nationwide construction boom under the Capital Expansion Act roughly doubled cement output, the dominant driver of the cement-CO₂ rise.',
+    '- [2009–2012] Oil emissions fell after fuel-subsidy reform and the Metro-North transit rollout cut urban road-transport demand.',
+  ].join('\n'),
+} as const;
+
 // Single source of truth for lens stage colors — sidebar panel and slope lines both read from here (LENS-02).
 export const STAGE_COLORS: Record<1 | 2 | 3, string> = {
   1: '#2e9e5b',

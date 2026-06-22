@@ -4,6 +4,7 @@ import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState } from '../state/CountryLensState';
 import { COMBINED_CHART_KEY } from '../state/CountryLensState';
+import type { AiResearchState } from '../state/AiResearchState';
 import { EmissionsChart } from './EmissionsChart';
 import type { LineDragCallbacks } from './drag-types';
 import { LensSync } from './LensSync';
@@ -34,6 +35,7 @@ export class ChartArea {
 
   private readonly lensState: CountryLensState;
   private readonly lensSync: LensSync;
+  private readonly aiResearch: AiResearchState;
 
   // Main chart — always present, always receives newly selected countries
   private readonly mainGroup: ChartGroup = {
@@ -60,12 +62,14 @@ export class ChartArea {
     state: AppState,
     metric: MetricDefinition,
     lensState: CountryLensState,
+    aiResearch: AiResearchState,
   ) {
     this.dataset = dataset;
     this.state = state;
     void metric;
     this.lensState = lensState;
     this.lensSync = new LensSync(lensState);
+    this.aiResearch = aiResearch;
 
     this.div = document.createElement('div');
     this.div.className = 'chart-area';
@@ -87,6 +91,7 @@ export class ChartArea {
       state,
     );
     this.mainChart.setLensState(this.lensState, this.lensSync);
+    this.mainChart.setAiResearch(this.aiResearch);
 
     this.dropSpacer = document.createElement('div');
     this.dropSpacer.className = 'chart-area__drop-spacer';
@@ -177,6 +182,7 @@ export class ChartArea {
           this.state,
         );
         chart.setLensState(this.lensState, this.lensSync);
+        chart.setAiResearch(this.aiResearch);
         this.rowCharts.set(group.chartId, chart);
       }
       chart.colorFor = this.colorFor;
