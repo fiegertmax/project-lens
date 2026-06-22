@@ -1120,6 +1120,14 @@ body.line-dragging {
   font-weight: 600;
 }
 
+.crosshair-tooltip__desc {
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.75;
+  white-space: normal;
+}
+
 /* ─── World map quick-select ─────────────────────────────────────────────── */
 .world-map-header-actions {
   margin-left: auto; /* push to the right edge of the collapsible header */

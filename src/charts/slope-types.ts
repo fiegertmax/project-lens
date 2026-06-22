@@ -31,5 +31,5 @@ export function boundaryYears(lenses: LensWindow[]): number[] {
 }
 
 /** All emission source definitions, single-sourced from config (SLOPE-04). */
-export const EMISSION_SOURCES: ReadonlyArray<{ key: string; label: string; color: string }> =
-  CO2_SOURCES.map(({ key, label, color }) => ({ key, label, color }));
+export const EMISSION_SOURCES: ReadonlyArray<{ key: string; label: string; description: string; color: string }> =
+  CO2_SOURCES.map(({ key, label, description, color }) => ({ key, label, description, color }));

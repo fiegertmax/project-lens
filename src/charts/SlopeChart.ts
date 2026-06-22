@@ -22,6 +22,7 @@ type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 interface SourceEntry {
   key: string;
   label: string;
+  description: string;
   color: string;
   leftValue: number | undefined;
   rightValue: number | undefined;
@@ -154,6 +155,7 @@ export class SlopeChart {
       EMISSION_SOURCES.map((src) => ({
         key: `${lens.stage}-${src.key}`,
         label: src.label,
+        description: src.description,
         color: src.color,
         leftValue: lens.values.get(src.key)?.left,
         rightValue: lens.values.get(src.key)?.right,
@@ -204,6 +206,7 @@ export class SlopeChart {
     return EMISSION_SOURCES.map((src) => ({
       key: `${lens.stage}-${src.key}`,
       label: src.label,
+      description: src.description,
       color: src.color,
       leftValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.startYear),
       rightValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.endYear),
@@ -495,6 +498,12 @@ export class SlopeChart {
 
     row.append(swatch, name, val);
     this.tooltip.appendChild(row);
+
+    // Plain-language gloss so unfamiliar factor names (flaring, land use change…) are self-explanatory.
+    const desc = document.createElement('div');
+    desc.className = 'crosshair-tooltip__desc';
+    desc.textContent = entry.description;
+    this.tooltip.appendChild(desc);
 
     this.positionTooltip(clientX, clientY);
     this.tooltip.classList.remove('crosshair-tooltip--hidden');
