@@ -14,6 +14,7 @@ import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { DataPoint } from '../data/types';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
+import type { AiResearchState } from '../state/AiResearchState';
 import { resolveSeries } from '../utils/interpolation';
 import { metricSpec, extraColumnFor } from '../utils/metricSpec';
 import type { LineDragCallbacks } from './drag-types';
@@ -84,6 +85,9 @@ export class EmissionsChart {
   private lensSync: LensSync | null = null;
   private lensUnsub: (() => void) | null = null;
 
+  private aiResearch: AiResearchState | null = null;
+  private aiUnsub: (() => void) | null = null;
+
   private readonly unsub: () => void;
 
   colorFor?: (c: string) => string;
@@ -134,6 +138,7 @@ export class EmissionsChart {
 
   destroy(): void {
     this.lensUnsub?.();
+    this.aiUnsub?.();
     this.unsub();
     this.crosshair.destroy();
     this.singleSlopeChart.destroy();
@@ -159,6 +164,38 @@ export class EmissionsChart {
     this.lensSync = sync;
     this.lensUnsub = state.subscribe(() => this.renderLenses());
     this.renderLenses();
+  }
+
+  /** Wires the AI-research selection highlight to this chart's single-country slope. */
+  setAiResearch(state: AiResearchState): void {
+    this.aiUnsub?.();
+    this.aiResearch = state;
+    this.aiUnsub = state.subscribe(() => this.applyResearchSelectable());
+    this.applyResearchSelectable();
+  }
+
+  /**
+   * Marks the single-country absolute slope chart selectable while research selection
+   * is armed. Only single-country, absolute-mode charts with placed lenses qualify —
+   * exactly the charts that "represent one country".
+   */
+  private applyResearchSelectable(): void {
+    const st = this.aiResearch;
+    if (!st) return;
+    const eligible =
+      !this.isMulti() &&
+      this.countries.length === 1 &&
+      this.state.metricMode() === 'absolute' &&
+      !!this.lensState &&
+      this.lensState.lensesFor(this.lensKey).length > 0;
+    const active = eligible && st.mode() === 'selecting';
+    this.singleSlopeChart.setSelectable(active, () =>
+      st.select({
+        country: this.countries[0],
+        lenses: this.lensState!.lensesFor(this.lensKey),
+        includeLUC: this.state.includeLandUseChange(),
+      }),
+    );
   }
 
   update(): void {
@@ -276,6 +313,7 @@ export class EmissionsChart {
           undefined,
           excludeSources,
         );
+        this.applyResearchSelectable();
       }
     } else {
       // Multi-country mode

@@ -1723,3 +1723,137 @@ body.line-dragging {
 .world-map__lens-remove--hidden {
   display: none;
 }
+
+/* AI trend research panel */
+
+.ai-research-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.ai-research-panel__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ai-research-panel__key {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.ai-research-panel__key:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.ai-research-panel__button {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ai-research-panel__button:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.ai-research-panel__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ai-research-panel__button--active {
+  background: var(--missing);
+}
+
+.ai-research-panel__status {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.ai-research-panel__status--prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  font-weight: 600;
+  animation: ai-research-pulse 1.6s ease-in-out infinite;
+}
+
+.ai-research-panel__status--loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.ai-research-panel__status--error {
+  padding: 8px 10px;
+  color: #b3261e;
+  background: rgba(179, 38, 30, 0.08);
+  border-radius: 6px;
+}
+
+@keyframes ai-research-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.ai-research-panel__spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-research-spin 0.8s linear infinite;
+}
+
+@keyframes ai-research-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-research-panel__output {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ai-research-panel__list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* AI-research selection: highlight single-country slope charts as click targets */
+.slope-chart--selectable {
+  cursor: pointer;
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+  animation: ai-research-pulse 1.6s ease-in-out infinite;
+}

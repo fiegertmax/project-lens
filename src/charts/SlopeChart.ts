@@ -57,6 +57,16 @@ export class SlopeChart {
     return this.root.node()!;
   }
 
+  /**
+   * Marks this slope chart as a clickable AI-research target. When active, the whole
+   * panel highlights and a click invokes onSelect; when inactive, both are cleared.
+   */
+  setSelectable(active: boolean, onSelect: () => void): void {
+    this.root.classed('slope-chart--selectable', active);
+    if (active) this.root.on('click.airesearch', () => onSelect());
+    else this.root.on('click.airesearch', null);
+  }
+
   destroy(): void {
     this.tooltip.remove();
     this.root.remove();
