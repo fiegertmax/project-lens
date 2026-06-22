@@ -1403,6 +1403,10 @@ body.line-dragging {
   fill: none;
 }
 
+.slope-chart__hit {
+  cursor: pointer;
+}
+
 /* ─── Crosshair overlay ──────────────────────────────────────────────────── */
 
 .crosshair__vline {

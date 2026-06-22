@@ -1,5 +1,5 @@
-import { axisRight, format, scaleLinear, select } from 'd3';
-import type { ScaleLinear, Selection } from 'd3';
+import { axisRight, format, scaleSymlog, select } from 'd3';
+import type { ScaleSymLog, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { STAGE_COLORS } from '../config';
 import { getSourceValue } from '../utils/getSourceValue';
@@ -13,8 +13,9 @@ const HEIGHT = 360;
 const SCALE_X = 65;
 const MIN_LABEL_GAP = 12;
 const YEAR_FORMAT = format('d');
+const DELTA_FORMAT = format(',.2f');
 
-type LinearScale = ScaleLinear<number, number>;
+type LogScale = ScaleSymLog<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 
@@ -36,6 +37,7 @@ export class SlopeChart {
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
+  private readonly tooltip: HTMLDivElement;
 
   constructor(parent: HTMLElement, dataset: EmissionsDataset) {
     this.dataset = dataset;
@@ -45,6 +47,10 @@ export class SlopeChart {
     this.plot = this.svg
       .append('g')
       .attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+
+    this.tooltip = document.createElement('div');
+    this.tooltip.className = 'crosshair-tooltip crosshair-tooltip--hidden';
+    document.body.appendChild(this.tooltip);
   }
 
   node(): HTMLDivElement {
@@ -52,6 +58,7 @@ export class SlopeChart {
   }
 
   destroy(): void {
+    this.tooltip.remove();
     this.root.remove();
   }
 
@@ -59,6 +66,7 @@ export class SlopeChart {
     ['axes', 'lines', 'labels', 'y-scale'].forEach((name) =>
       this.group(name).selectAll('*').remove(),
     );
+    this.hideTooltip();
     this.root.style('display', 'none');
   }
 
@@ -101,10 +109,10 @@ export class SlopeChart {
       const allValues = allEntries.flat().flatMap((s) =>
         [s.leftValue, s.rightValue].filter((v): v is number => v !== undefined),
       );
-      domainMin = allValues.length ? Math.min(0, Math.min(...allValues)) : 0;
+      domainMin = allValues.length ? Math.min(...allValues) : 0;
       domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
     }
-    const y: LinearScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
+    const y: LogScale = scaleSymlog().domain([domainMin, domainMax]).range([innerH, 0]);
 
     this.renderAxes(columns, lenses, innerH);
     this.renderAllLines(lenses, allEntries, columns, y);
@@ -151,10 +159,10 @@ export class SlopeChart {
       const allValues = allEntries.flat().flatMap((s) =>
         [s.leftValue, s.rightValue].filter((v): v is number => v !== undefined),
       );
-      domainMin = allValues.length ? Math.min(0, Math.min(...allValues)) : 0;
+      domainMin = allValues.length ? Math.min(...allValues) : 0;
       domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
     }
-    const y: LinearScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
+    const y: LogScale = scaleSymlog().domain([domainMin, domainMax]).range([innerH, 0]);
 
     this.renderAxes(columns, lenses, innerH);
     this.renderAllLines(lenses, allEntries, columns, y);
@@ -253,7 +261,7 @@ export class SlopeChart {
     lenses: StagedLensWindow[],
     allEntries: SourceEntry[][],
     columns: Map<number, number>,
-    y: LinearScale,
+    y: LogScale,
   ): void {
     const g = this.group('lines');
     g.selectAll('*').remove();
@@ -297,7 +305,7 @@ export class SlopeChart {
     g: PlotLayer,
     leftEntries: SourceEntry[],
     rightEntries: SourceEntry[],
-    y: LinearScale,
+    y: LogScale,
     x1: number,
     x2: number,
   ): void {
@@ -325,7 +333,7 @@ export class SlopeChart {
   private renderStageLines(
     g: PlotLayer,
     entries: SourceEntry[],
-    y: LinearScale,
+    y: LogScale,
     lx: number,
     rx: number,
   ): boolean {
@@ -344,6 +352,25 @@ export class SlopeChart {
       .attr('y2', (d) => y(d.rightValue!))
       .attr('stroke', (d) => d.color)
       .attr('stroke-width', 2);
+
+    // Wider transparent hit areas make individual slopes easy to hover.
+    g.selectAll<SVGLineElement, SourceEntry>(`line.hit-${cssKey(entries[0]?.key ?? 'h')}`)
+      .data(drawable, (d) => d.key)
+      .join('line')
+      .attr('class', 'slope-chart__hit')
+      .attr('x1', lx)
+      .attr('y1', (d) => y(d.leftValue!))
+      .attr('x2', rx)
+      .attr('y2', (d) => y(d.rightValue!))
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 12)
+      .on('mouseover', (event: MouseEvent, d: SourceEntry) => {
+        this.showTooltip(d, event.clientX, event.clientY);
+      })
+      .on('mousemove', (event: MouseEvent) => {
+        this.positionTooltip(event.clientX, event.clientY);
+      })
+      .on('mouseout', () => this.hideTooltip());
 
     const dots = drawable.flatMap((s) => [
       { cx: lx, cy: y(s.leftValue!), color: s.color, id: s.key + '-L' },
@@ -369,7 +396,7 @@ export class SlopeChart {
   private renderAllLabels(
     allEntries: SourceEntry[][],
     columns: Map<number, number>,
-    y: LinearScale,
+    y: LogScale,
     innerW: number,
   ): void {
     const lastEntries = allEntries[allEntries.length - 1] ?? [];
@@ -398,7 +425,7 @@ export class SlopeChart {
   }
 
   /** Floating value scale to the right of the parallel axes with a unit label. */
-  private renderScale(y: LinearScale, innerW: number, innerH: number): void {
+  private renderScale(y: LogScale, innerW: number, innerH: number): void {
     // Cast required: PlotLayer has a narrower datum type than the axis call expects.
     const g = this.group('y-scale').attr('transform', `translate(${innerW + SCALE_X}, 0)`) as unknown as SvgGroup;
     g.call(axisRight(y).ticks(5));
@@ -431,6 +458,52 @@ export class SlopeChart {
       prevY = bumped;
     }
     return adjusted;
+  }
+
+  private showTooltip(entry: SourceEntry, clientX: number, clientY: number): void {
+    this.tooltip.textContent = '';
+
+    const row = document.createElement('div');
+    row.className = 'crosshair-tooltip__row';
+
+    const swatch = document.createElement('span');
+    swatch.className = 'crosshair-tooltip__swatch';
+    swatch.style.background = entry.color;
+
+    const name = document.createElement('span');
+    name.className = 'crosshair-tooltip__label';
+    name.textContent = entry.label;
+
+    const left = entry.leftValue ?? 0;
+    const right = entry.rightValue ?? 0;
+    const delta = right - left;
+    const sign = delta >= 0 ? '+' : '';
+    const pct = left !== 0 ? ` (${sign}${((delta / Math.abs(left)) * 100).toFixed(1)}%)` : '';
+
+    const val = document.createElement('span');
+    val.className = 'crosshair-tooltip__value';
+    val.textContent = `${sign}${DELTA_FORMAT(delta)} Mt${pct}`;
+
+    row.append(swatch, name, val);
+    this.tooltip.appendChild(row);
+
+    this.positionTooltip(clientX, clientY);
+    this.tooltip.classList.remove('crosshair-tooltip--hidden');
+  }
+
+  private positionTooltip(clientX: number, clientY: number): void {
+    const tw = this.tooltip.offsetWidth || 160;
+    const th = this.tooltip.offsetHeight || 40;
+    const left = clientX + 16 + tw > window.innerWidth - 8
+      ? clientX - tw - 12
+      : clientX + 16;
+    const top = Math.max(8, Math.min(clientY - th / 2, window.innerHeight - th - 8));
+    this.tooltip.style.left = `${left}px`;
+    this.tooltip.style.top = `${top}px`;
+  }
+
+  private hideTooltip(): void {
+    this.tooltip.classList.add('crosshair-tooltip--hidden');
   }
 
   private group(name: string): PlotLayer {
