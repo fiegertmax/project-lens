@@ -59,6 +59,10 @@ export class ConfigPanel {
   /** Globe button in the Countries header that opens the quick-select map. */
   private buildWorldMapButton(section: Collapsible, dataset: EmissionsDataset, state: AppState): void {
     const modal = new WorldMapModal(dataset, state);
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'world-map-header-actions';
+
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'world-map-button';
@@ -68,7 +72,16 @@ export class ConfigPanel {
       e.stopPropagation(); // don't toggle the collapsible
       void modal.open();
     });
-    section.appendToHeader(button);
+
+    const tip = new InfoTip(
+      wrapper,
+      'Opens an interactive world map — click any country to add or remove it from the chart.',
+      'World map explanation',
+    );
+    tip.icon.addEventListener('click', (e) => e.stopPropagation());
+
+    wrapper.insertBefore(button, tip.icon);
+    section.appendToHeader(wrapper);
   }
 
   private buildLucToggle(parent: HTMLElement, state: AppState): void {

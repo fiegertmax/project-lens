@@ -1457,8 +1457,14 @@ body.line-dragging {
 }
 
 /* ─── World map quick-select ─────────────────────────────────────────────── */
-.world-map-button {
+.world-map-header-actions {
   margin-left: auto; /* push to the right edge of the collapsible header */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.world-map-button {
   display: grid;
   place-items: center;
   width: 24px;
