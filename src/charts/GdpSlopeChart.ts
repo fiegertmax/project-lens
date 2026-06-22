@@ -162,6 +162,17 @@ export class GdpSlopeChart {
     let anyData = false;
 
     for (const m of metrics) {
+      if (m.co2Pct !== undefined && m.gdpPct !== undefined) {
+        const co2EndY = y(m.co2Pct);
+        const gdpEndY = y(m.gdpPct);
+        const fill = decouplingColor(m.gdpPct, m.co2Pct);
+        if (fill) {
+          g.append('path').attr('class', 'gdp-slope-chart__area')
+            .attr('d', `M${m.startX},${zeroY} L${m.endX},${gdpEndY} L${m.endX},${co2EndY} Z`)
+            .attr('fill', fill).attr('opacity', 0.18).attr('stroke', 'none');
+        }
+      }
+
       if (m.co2Pct !== undefined) {
         anyData = true;
         const endY = y(m.co2Pct);
@@ -255,6 +266,16 @@ export class GdpSlopeChart {
       .join('g')
       .attr('class', name);
   }
+}
+
+/** Returns the area fill color for the three decoupling scenarios; undefined when both rise. */
+function decouplingColor(gdpPct: number, co2Pct: number): string | undefined {
+  const gdpRises = gdpPct > 0;
+  const co2Rises = co2Pct > 0; // ±0% treated as falling per spec
+  if (gdpRises && !co2Rises) return '#27ae60';  // decoupling
+  if (!co2Rises) return '#f1c40f';              // co2 falls regardless of gdp
+  if (!gdpRises) return '#e74c3c';              // co2 rises, gdp falls
+  return '#f1c40f';                             // both rise
 }
 
 function pctChange(start: number | undefined, end: number | undefined): number | undefined {
