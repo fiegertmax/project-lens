@@ -58,6 +58,12 @@ export class EmissionsDataset {
   }
 
 
+  /** True for sovereign countries + World; false for continents, income groups, and other aggregates. */
+  private static isSelectableEntity(country: string, isoCode: string): boolean {
+    if (isoCode) return true;
+    return country === 'World' || country === 'Kosovo';
+  }
+
   private static index(
     rows: DSVRowString[],
     metric: MetricDefinition,
@@ -68,6 +74,7 @@ export class EmissionsDataset {
       const country = row.country;
       const year = Number(row.year);
       if (!country || !Number.isFinite(year)) continue;
+      if (!EmissionsDataset.isSelectableEntity(country, row.iso_code ?? '')) continue;
 
       const series = EmissionsDataset.ensureSeries(byCountry, country);
       series.points.push({
