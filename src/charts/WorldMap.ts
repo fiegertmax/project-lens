@@ -6,6 +6,7 @@ import { resolveOwidName } from '../data/countryNameAliases';
 import type { CountryFeature } from '../data/worldGeometry';
 import { CircularFisheye } from './fisheye';
 import { LENS_ICON } from '../ui/icons';
+import { attachCursorTooltip } from '../ui/cursorTooltip';
 
 const VIEW = { width: 960, height: 480 } as const;
 const LENS = { radius: 150, distortion: 4 } as const;
@@ -110,6 +111,7 @@ export class WorldMap {
     handle.setAttribute('aria-label', 'Drag the magnifier lens onto the map');
     handle.innerHTML = LENS_ICON;
     handle.addEventListener('pointerdown', (event) => this.onHandleGrab(event));
+    attachCursorTooltip(handle, 'Drag onto the map to place a magnifying lens. Scroll over the lens to resize it.');
 
     const remove = document.createElement('button');
     remove.type = 'button';

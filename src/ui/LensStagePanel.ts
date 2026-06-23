@@ -6,6 +6,7 @@ import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
 import { LENS_ICON } from './icons';
 import { createLensDragSweeper } from './lens-drag-sweeper';
+import { attachCursorTooltip } from './cursorTooltip';
 
 /** The three stage numbers in display order. */
 const STAGES: readonly LensStage[] = [1, 2, 3];
@@ -53,7 +54,7 @@ export class LensStagePanel {
       btn.className = `lens-stage-icon lens-stage-icon--stage-${stage}`;
       // innerHTML is safe here: LENS_ICON is a trusted static SVG constant, not user data
       btn.innerHTML = LENS_ICON;
-      btn.setAttribute('title', `Drag onto a country chart to place a stage-${stage} lens`);
+      attachCursorTooltip(btn, `Drag onto a country chart to place a lens. It highlights a time window and shows derived insights like rate of change or emissions per person.`);
       this.stageButtons.set(stage, btn);
       this.wireDrag(btn, stage);
 

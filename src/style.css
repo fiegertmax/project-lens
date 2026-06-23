@@ -1105,6 +1105,27 @@ body.line-dragging {
   opacity: 0;
 }
 
+/* Cursor-following instructional tooltip for lens handles */
+.cursor-tooltip {
+  position: fixed;
+  z-index: 200;
+  max-width: 220px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.08s ease;
+}
+
+.cursor-tooltip--hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
 .crosshair-tooltip__year {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
