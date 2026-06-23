@@ -3,6 +3,7 @@ import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { PlacedLens } from '../state/CountryLensState';
 import { getGdpPerCapita } from '../utils/getGdpPerCapita';
+import { showCursorTooltip, hideCursorTooltip } from '../ui/cursorTooltip';
 
 const MARGIN = { top: 20, right: 20, bottom: 48, left: 68 };
 const HEIGHT = 360;
@@ -15,8 +16,12 @@ type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 
+const DRAG_HINT = 'Found a trend? Drag-and-drop a country from the line chart to a blank space to research it further.';
+
 interface ScatterPoint {
   key: string;
+  country: string;
+  year: number;
   co2PerCap: number;
   gdpPerCap: number;
   color: string;
@@ -102,6 +107,8 @@ export class LensScatterPlot {
           if (gdpPerCap === undefined || gdpPerCap <= 0) continue;
           points.push({
             key: `${country}-${year}-${lens.stage}`,
+            country,
+            year,
             co2PerCap,
             gdpPerCap,
             color: colorFor(country),
@@ -160,7 +167,11 @@ export class LensScatterPlot {
       .attr('fill', (d) => d.color)
       .attr('opacity', 0.72)
       .attr('stroke', 'var(--bg)')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.5)
+      .on('pointerenter pointermove', function (ev: PointerEvent) {
+        showCursorTooltip(DRAG_HINT, ev.clientX, ev.clientY);
+      })
+      .on('pointerleave', () => hideCursorTooltip());
   }
 
   private renderEmpty(innerW: number, innerH: number): void {

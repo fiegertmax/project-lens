@@ -10,6 +10,20 @@ function getTip(): HTMLDivElement {
   return tip;
 }
 
+export function showCursorTooltip(text: string, clientX: number, clientY: number): void {
+  const t = getTip();
+  t.textContent = text;
+  t.classList.remove('cursor-tooltip--hidden');
+  const offset = 14;
+  const x = Math.min(clientX + offset, window.innerWidth - t.offsetWidth - 8);
+  t.style.left = `${Math.max(8, x)}px`;
+  t.style.top = `${clientY + offset}px`;
+}
+
+export function hideCursorTooltip(): void {
+  getTip().classList.add('cursor-tooltip--hidden');
+}
+
 /** Attaches a cursor-following tooltip to `el`. The tooltip appears on hover and tracks the pointer. */
 export function attachCursorTooltip(el: HTMLElement, text: string): void {
   el.addEventListener('pointerenter', () => {
