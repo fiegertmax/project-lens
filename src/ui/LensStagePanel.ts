@@ -1,5 +1,6 @@
 import { LENS_STAGE_WIDTH } from '../config';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
+import { CHART_MARGIN } from '../charts/EmissionsChart';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState, LensStage } from '../state/CountryLensState';
 import { COMBINED_CHART_KEY } from '../state/CountryLensState';
@@ -89,13 +90,13 @@ export class LensStagePanel {
         previous?.classList.remove('emissions-chart--drop');
         target?.classList.add('emissions-chart--drop');
       },
-      // Place on each chart swept over while Shift is held
-      onSweep: (target) => this.placeOn(target, stage, true),
-      onDrop: (target, { shift }) => this.placeOn(target, stage, shift),
+      // Place on each chart swept over while Shift is held (use chart center as fallback)
+      onSweep: (target) => this.placeOn(target, stage, true, null),
+      onDrop: (target, { shift, clientX }) => this.placeOn(target, stage, shift, clientX),
     });
   }
 
-  private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean): void {
+  private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean, clientX: number | null): void {
     if (!chartEl) return;
     const key = chartEl.dataset.lensKey ?? COMBINED_CHART_KEY;
     // If a lens of this stage already exists elsewhere, inherit its boundaries so
@@ -103,38 +104,40 @@ export class LensStagePanel {
     const sibling = this.state.allLenses().find(({ lens }) => lens.stage === stage);
     const { startYear, endYear } = sibling
       ? { startYear: sibling.lens.startYear, endYear: sibling.lens.endYear }
-      : this.freeWindow(key, chartEl);
+      : this.windowCenteredAt(chartEl, clientX);
     this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
   }
 
   /**
-   * Computes a placement window that doesn't collide with existing lenses on `key`.
-   * Prefers the centered default; if that overlaps, places immediately after the last lens.
+   * Returns a lens window centered on the drop position (converted from client X to year),
+   * clamped so neither boundary exits the chart's visible year domain.
+   * Falls back to the domain center when `clientX` is null (sweep mode).
    */
-  private freeWindow(key: string, chartEl: HTMLElement): { startYear: number; endYear: number } {
-    const preferred = this.placementWindow(chartEl);
-    const existing = this.state.lensesFor(key);
-    if (existing.length === 0) return preferred;
-    const overlaps = existing.some(
-      (l) => preferred.startYear < l.endYear && l.startYear < preferred.endYear,
-    );
-    if (!overlaps) return preferred;
-    const last = existing[existing.length - 1];
-    const span = preferred.endYear - preferred.startYear;
-    return { startYear: last.endYear, endYear: last.endYear + span };
-  }
-
-  /** Derives a placement window centered in the chart's visible year domain.
-   *  Reads `data-year-start`/`data-year-end` if present; falls back to dataset midpoint. */
-  private placementWindow(chartEl: HTMLElement): { startYear: number; endYear: number } {
-    const rawStart = chartEl.dataset.yearStart;
-    const rawEnd = chartEl.dataset.yearEnd;
-    const domainStart = rawStart ? Number(rawStart) : 1950;
-    const domainEnd = rawEnd ? Number(rawEnd) : 2024;
+  private windowCenteredAt(chartEl: HTMLElement, clientX: number | null): { startYear: number; endYear: number } {
+    const domainStart = chartEl.dataset.yearStart ? Number(chartEl.dataset.yearStart) : 1950;
+    const domainEnd = chartEl.dataset.yearEnd ? Number(chartEl.dataset.yearEnd) : 2024;
     const span = LENS_STAGE_WIDTH.default;
-    const center = Math.round((domainStart + domainEnd) / 2);
     const half = Math.round(span / 2);
-    return { startYear: center - half, endYear: center - half + span };
+
+    let dropYear: number;
+    if (clientX !== null) {
+      const svg = chartEl.querySelector<SVGSVGElement>('.emissions-chart__svg');
+      const svgRect = svg?.getBoundingClientRect();
+      if (svgRect) {
+        const plotWidth = svgRect.width - CHART_MARGIN.left - CHART_MARGIN.right;
+        const plotX = clientX - svgRect.left - CHART_MARGIN.left;
+        const t = Math.max(0, Math.min(1, plotX / plotWidth));
+        dropYear = Math.round(domainStart + t * (domainEnd - domainStart));
+      } else {
+        dropYear = Math.round((domainStart + domainEnd) / 2);
+      }
+    } else {
+      dropYear = Math.round((domainStart + domainEnd) / 2);
+    }
+
+    const startYear = Math.max(domainStart, Math.min(domainEnd - span, dropYear - half));
+    const endYear = startYear + span;
+    return { startYear, endYear };
   }
 
   /**

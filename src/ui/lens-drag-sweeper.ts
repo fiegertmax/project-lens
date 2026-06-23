@@ -9,7 +9,7 @@ export interface LensDragSweeperOptions<T> {
   /** Called whenever the hovered target changes; receives the previous target too. */
   onHover?(target: T | null, previous: T | null): void;
   /** Called once on pointer release; `visited` is every unique target hovered during the drag. */
-  onDrop(target: T | null, opts: { shift: boolean; visited: Set<T> }): void;
+  onDrop(target: T | null, opts: { shift: boolean; visited: Set<T>; clientX: number; clientY: number }): void;
   /** Called for every newly-hovered target while Shift is held (additive sweep). */
   onSweep?(target: T): void;
   /** Checked right before the ghost is created; return false to cancel the drag. */
@@ -90,7 +90,7 @@ export function createLensDragSweeper<T>(
     if (dragging) {
       const target = options.resolveTarget(event.clientX, event.clientY);
       if (target !== null) visitedTargets.add(target);
-      options.onDrop(target, { shift: event.shiftKey, visited: new Set(visitedTargets) });
+      options.onDrop(target, { shift: event.shiftKey, visited: new Set(visitedTargets), clientX: event.clientX, clientY: event.clientY });
     }
     end();
   };

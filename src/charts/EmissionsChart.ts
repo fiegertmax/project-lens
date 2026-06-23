@@ -27,7 +27,8 @@ import { CrosshairOverlay } from './CrosshairOverlay';
 import { crossCountrySum } from '../utils/crossCountryMean';
 import type { StagedLensWindow } from './slope-types';
 
-const MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
+export const CHART_MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
+const MARGIN = CHART_MARGIN;
 const HEIGHT = 360;
 const YEAR_FORMAT = format('d');
 
