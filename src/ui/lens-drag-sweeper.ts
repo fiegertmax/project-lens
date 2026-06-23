@@ -14,6 +14,8 @@ export interface LensDragSweeperOptions<T> {
   onSweep?(target: T): void;
   /** Checked right before the ghost is created; return false to cancel the drag. */
   canStart?(): boolean;
+  /** Per-move drop validity at the pointer; false renders a red 'x' on the ghost and blocks the drop. */
+  canDrop?(target: T | null, clientX: number, clientY: number): boolean;
 }
 
 /** Wires pointer-based ghost-drag onto a handle. Shared by the line-chart and pie-chart
@@ -80,6 +82,8 @@ export function createLensDragSweeper<T>(
     moveGhost(event);
     const target = options.resolveTarget(event.clientX, event.clientY);
     setHover(target);
+    const droppable = options.canDrop ? options.canDrop(target, event.clientX, event.clientY) : true;
+    ghost?.classList.toggle('lens-ghost--no-drop', !droppable);
     if (event.shiftKey && target && !sweptKeys.has(target)) {
       sweptKeys.add(target);
       options.onSweep?.(target);
@@ -90,7 +94,10 @@ export function createLensDragSweeper<T>(
     if (dragging) {
       const target = options.resolveTarget(event.clientX, event.clientY);
       if (target !== null) visitedTargets.add(target);
-      options.onDrop(target, { shift: event.shiftKey, visited: new Set(visitedTargets), clientX: event.clientX, clientY: event.clientY });
+      const droppable = options.canDrop ? options.canDrop(target, event.clientX, event.clientY) : true;
+      if (droppable) {
+        options.onDrop(target, { shift: event.shiftKey, visited: new Set(visitedTargets), clientX: event.clientX, clientY: event.clientY });
+      }
     }
     end();
   };

@@ -93,19 +93,31 @@ export class LensStagePanel {
       // Place on each chart swept over while Shift is held (use chart center as fallback)
       onSweep: (target) => this.placeOn(target, stage, true, null),
       onDrop: (target, { shift, clientX }) => this.placeOn(target, stage, shift, clientX),
+      // Red 'x' on the ghost when the would-be window overlaps an existing lens on the hovered chart.
+      canDrop: (target, clientX) => {
+        if (!target) return true; // neutral ghost over non-chart space
+        const key = target.dataset.lensKey ?? COMBINED_CHART_KEY;
+        return this.state.canPlaceLens(key, this.resolveWindow(target, stage, clientX));
+      },
     });
   }
 
   private placeOn(chartEl: HTMLElement | null, stage: LensStage, shift: boolean, clientX: number | null): void {
     if (!chartEl) return;
     const key = chartEl.dataset.lensKey ?? COMBINED_CHART_KEY;
-    // If a lens of this stage already exists elsewhere, inherit its boundaries so
-    // the new lens starts in sync with its peers (drag/zoom moves all together).
+    const { startYear, endYear } = this.resolveWindow(chartEl, stage, clientX);
+    this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
+  }
+
+  /**
+   * The window a new stage lens would occupy: inherits a same-stage sibling's bounds when one
+   * exists (so peers stay in sync for joint drag/zoom), otherwise centers on the drop position.
+   */
+  private resolveWindow(chartEl: HTMLElement, stage: LensStage, clientX: number | null): { startYear: number; endYear: number } {
     const sibling = this.state.allLenses().find(({ lens }) => lens.stage === stage);
-    const { startYear, endYear } = sibling
+    return sibling
       ? { startYear: sibling.lens.startYear, endYear: sibling.lens.endYear }
       : this.windowCenteredAt(chartEl, clientX);
-    this.state.placeLens(key, { stage, startYear, endYear, linked: shift });
   }
 
   /**

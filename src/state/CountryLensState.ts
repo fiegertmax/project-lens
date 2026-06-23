@@ -77,17 +77,7 @@ export class CountryLensState {
     country: string,
     input: { stage: LensStage; startYear: number; endYear: number; linked?: boolean },
   ): PlacedLens | null {
-    const span = Math.min(
-      LENS_STAGE_WIDTH.max,
-      Math.max(LENS_STAGE_WIDTH.min, input.endYear - input.startYear),
-    );
-    const candidate: PlacedLens = {
-      id: makeId(),
-      stage: input.stage,
-      startYear: input.startYear,
-      endYear: input.startYear + span,
-      linked: input.linked ?? false,
-    };
+    const candidate = this.buildCandidate(input);
 
     const existing = this.byCountry.get(country) ?? [];
     if (existing.some(l => this.overlaps(candidate, l))) return null;
@@ -98,44 +88,25 @@ export class CountryLensState {
     return candidate;
   }
 
+  /** Dry-run of placeLens: true if a lens with the proposed window would fit on the country. */
+  canPlaceLens(country: string, input: { startYear: number; endYear: number }): boolean {
+    const candidate = this.buildCandidate({ stage: 1, ...input });
+    const existing = this.byCountry.get(country) ?? [];
+    return !existing.some(l => this.overlaps(candidate, l));
+  }
+
   /**
    * Shifts the lens by deltaYears. When yearRange is provided, clamps the result so
    * startYear >= yearRange[0] and endYear <= yearRange[1].
    * Rejected without notify if the shifted window would overlap another lens.
    */
   moveLens(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
-    const lenses = this.byCountry.get(country);
-    if (!lenses) return false;
-    const idx = lenses.findIndex(l => l.id === id);
-    if (idx === -1) return false;
+    return this.applyGesture(country, id, (lens) => this.computeMove(lens, deltaYears, yearRange));
+  }
 
-    const lens = lenses[idx];
-    const span = lens.endYear - lens.startYear;
-    let newStart = Math.round(lens.startYear + deltaYears);
-    let newEnd = Math.round(lens.endYear + deltaYears);
-
-    if (yearRange) {
-      if (newStart < yearRange[0]) {
-        newStart = yearRange[0];
-        newEnd = yearRange[0] + span;
-      } else if (newEnd > yearRange[1]) {
-        newEnd = yearRange[1];
-        newStart = yearRange[1] - span;
-      }
-    }
-
-    const moved: PlacedLens = {
-      ...lens,
-      startYear: newStart,
-      endYear: newEnd,
-    };
-    const others = lenses.filter(l => l.id !== id);
-    if (others.some(l => this.overlaps(moved, l))) return false;
-
-    lenses[idx] = moved;
-    this.byCountry.set(country, [...lenses].sort((a, b) => a.startYear - b.startYear));
-    this.notify();
-    return true;
+  /** Dry-run of moveLens: true if the shifted lens would fit without overlapping a sibling. */
+  canMoveLens(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
+    return this.canApplyGesture(country, id, (lens) => this.computeMove(lens, deltaYears, yearRange));
   }
 
   /**
@@ -145,37 +116,12 @@ export class CountryLensState {
    * Rejected without notify if the resized window would overlap another lens.
    */
   resizeLens(country: string, id: string, newSpan: number, yearRange?: [number, number]): boolean {
-    const lenses = this.byCountry.get(country);
-    if (!lenses) return false;
-    const idx = lenses.findIndex(l => l.id === id);
-    if (idx === -1) return false;
+    return this.applyGesture(country, id, (lens) => this.computeResize(lens, newSpan, yearRange));
+  }
 
-    const lens = lenses[idx];
-    const clamped = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, newSpan));
-
-    let newStartYear = lens.startYear;
-    let newEndYear = lens.startYear + clamped;
-
-    if (yearRange) {
-      if (newEndYear > yearRange[1]) {
-        // Right boundary hit: anchor endYear, extend startYear left
-        newEndYear = yearRange[1];
-        newStartYear = Math.max(yearRange[0], yearRange[1] - clamped);
-      } else if (newStartYear < yearRange[0]) {
-        // Left boundary hit: anchor startYear, extend endYear right
-        newStartYear = yearRange[0];
-        newEndYear = Math.min(yearRange[1], yearRange[0] + clamped);
-      }
-    }
-
-    const resized: PlacedLens = { ...lens, startYear: newStartYear, endYear: newEndYear };
-    const others = lenses.filter(l => l.id !== id);
-    if (others.some(l => this.overlaps(resized, l))) return false;
-
-    lenses[idx] = resized;
-    this.byCountry.set(country, [...lenses].sort((a, b) => a.startYear - b.startYear));
-    this.notify();
-    return true;
+  /** Dry-run of resizeLens: true if the resized lens would fit without overlapping a sibling. */
+  canResizeLens(country: string, id: string, newSpan: number, yearRange?: [number, number]): boolean {
+    return this.canApplyGesture(country, id, (lens) => this.computeResize(lens, newSpan, yearRange));
   }
 
   /** Removes a lens by id and fires notify. */
@@ -209,6 +155,85 @@ export class CountryLensState {
   }
 
   // --- helpers ---
+
+  /** Builds a new lens with a min/max-clamped span anchored at startYear. */
+  private buildCandidate(input: { stage: LensStage; startYear: number; endYear: number; linked?: boolean }): PlacedLens {
+    const span = Math.min(
+      LENS_STAGE_WIDTH.max,
+      Math.max(LENS_STAGE_WIDTH.min, input.endYear - input.startYear),
+    );
+    return {
+      id: makeId(),
+      stage: input.stage,
+      startYear: input.startYear,
+      endYear: input.startYear + span,
+      linked: input.linked ?? false,
+    };
+  }
+
+  /** Computes the shifted-and-clamped lens for a move gesture (pure, no mutation). */
+  private computeMove(lens: PlacedLens, deltaYears: number, yearRange?: [number, number]): PlacedLens {
+    const span = lens.endYear - lens.startYear;
+    let newStart = Math.round(lens.startYear + deltaYears);
+    let newEnd = Math.round(lens.endYear + deltaYears);
+
+    if (yearRange) {
+      if (newStart < yearRange[0]) {
+        newStart = yearRange[0];
+        newEnd = yearRange[0] + span;
+      } else if (newEnd > yearRange[1]) {
+        newEnd = yearRange[1];
+        newStart = yearRange[1] - span;
+      }
+    }
+    return { ...lens, startYear: newStart, endYear: newEnd };
+  }
+
+  /** Computes the resized-and-clamped lens for a resize gesture (pure, no mutation). */
+  private computeResize(lens: PlacedLens, newSpan: number, yearRange?: [number, number]): PlacedLens {
+    const clamped = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, newSpan));
+    let newStartYear = lens.startYear;
+    let newEndYear = lens.startYear + clamped;
+
+    if (yearRange) {
+      if (newEndYear > yearRange[1]) {
+        // Right boundary hit: anchor endYear, extend startYear left
+        newEndYear = yearRange[1];
+        newStartYear = Math.max(yearRange[0], yearRange[1] - clamped);
+      } else if (newStartYear < yearRange[0]) {
+        // Left boundary hit: anchor startYear, extend endYear right
+        newStartYear = yearRange[0];
+        newEndYear = Math.min(yearRange[1], yearRange[0] + clamped);
+      }
+    }
+    return { ...lens, startYear: newStartYear, endYear: newEndYear };
+  }
+
+  /** True if the gesture's computed window fits without overlapping a sibling lens. */
+  private canApplyGesture(country: string, id: string, compute: (lens: PlacedLens) => PlacedLens): boolean {
+    const lenses = this.byCountry.get(country);
+    if (!lenses) return false;
+    const lens = lenses.find(l => l.id === id);
+    if (!lens) return false;
+    const next = compute(lens);
+    return !lenses.some(l => l.id !== id && this.overlaps(next, l));
+  }
+
+  /** Applies a gesture if it fits, sorting and notifying on success; rejects (false) on overlap. */
+  private applyGesture(country: string, id: string, compute: (lens: PlacedLens) => PlacedLens): boolean {
+    const lenses = this.byCountry.get(country);
+    if (!lenses) return false;
+    const idx = lenses.findIndex(l => l.id === id);
+    if (idx === -1) return false;
+
+    const next = compute(lenses[idx]);
+    if (lenses.some(l => l.id !== id && this.overlaps(next, l))) return false;
+
+    lenses[idx] = next;
+    this.byCountry.set(country, [...lenses].sort((a, b) => a.startYear - b.startYear));
+    this.notify();
+    return true;
+  }
 
   /**
    * Strict overlap: shared boundaries (a.endYear === b.startYear) are NOT overlapping

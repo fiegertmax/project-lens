@@ -16,37 +16,35 @@ export class LensSync {
   }
 
   /**
-   * Moves the origin lens by deltaYears. If the origin is linked, fans the same
-   * delta to every other linked lens of the same stage. Sibling conflicts are
-   * silently skipped (CountryLensState.moveLens returns false) — all other
-   * valid siblings and the origin still move. yearRange is forwarded for
-   * boundary clamping so lenses cannot be dragged outside the chart.
+   * Moves the origin lens by deltaYears and fans the same delta to every other
+   * same-stage lens across all countries. All-or-nothing: if any sibling cannot
+   * move (it would overlap a neighbouring-stage lens), none move — keeping siblings
+   * locked in sync. yearRange is forwarded for boundary clamping.
    */
   moveLinkedLens(originCountry: string, originId: string, deltaYears: number, yearRange?: [number, number]): void {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    this.state.moveLens(originCountry, originId, deltaYears, yearRange);
+    const targets = this.gestureTargets(origin.stage, originCountry, originId);
+    if (!targets.every(t => this.state.canMoveLens(t.country, t.id, deltaYears, yearRange))) return;
 
-    for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
-      this.state.moveLens(country, lens.id, deltaYears, yearRange);
-    }
+    for (const t of targets) this.state.moveLens(t.country, t.id, deltaYears, yearRange);
   }
 
   /**
    * Resizes the origin lens to newSpan and fans the same span to every other
-   * lens of the same stage across all countries. yearRange is forwarded so
+   * same-stage lens across all countries. All-or-nothing: if any sibling cannot
+   * resize without overlapping, none resize. yearRange is forwarded so
    * boundary-aware clamping can anchor at chart edges instead of overflowing.
    */
   resizeLinkedLens(originCountry: string, originId: string, newSpan: number, yearRange?: [number, number]): void {
     const origin = this.findLens(originCountry, originId);
     if (!origin) return;
 
-    this.state.resizeLens(originCountry, originId, newSpan, yearRange);
+    const targets = this.gestureTargets(origin.stage, originCountry, originId);
+    if (!targets.every(t => this.state.canResizeLens(t.country, t.id, newSpan, yearRange))) return;
 
-    for (const { country, lens } of this.stageSiblings(origin.stage, originId)) {
-      this.state.resizeLens(country, lens.id, newSpan, yearRange);
-    }
+    for (const t of targets) this.state.resizeLens(t.country, t.id, newSpan, yearRange);
   }
 
   // --- private helpers ---
@@ -55,10 +53,12 @@ export class LensSync {
     return this.state.lensesFor(country).find(l => l.id === id) ?? null;
   }
 
-  /** All lenses of the given stage across all countries, excluding the origin id. */
-  private stageSiblings(stage: LensStage, excludeId: string) {
-    return this.state.allLenses().filter(
-      ({ lens }) => lens.stage === stage && lens.id !== excludeId,
-    );
+  /** The origin plus every other same-stage lens across all countries, as {country, id} targets. */
+  private gestureTargets(stage: LensStage, originCountry: string, originId: string): { country: string; id: string }[] {
+    const targets = [{ country: originCountry, id: originId }];
+    for (const { country, lens } of this.state.allLenses()) {
+      if (lens.stage === stage && lens.id !== originId) targets.push({ country, id: lens.id });
+    }
+    return targets;
   }
 }
