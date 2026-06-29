@@ -100,7 +100,7 @@ export class ConfigPanel {
     toggle.onChange(() => {
       const perCapita = toggle.checked();
       toggle.set({ checked: perCapita, disabled: false, label: perCapita ? 'Per capita' : 'Absolute' });
-      lensState.clearAll();
+      lensState.clear();
       state.setMetricMode(perCapita ? 'per-capita' : 'absolute');
     });
 

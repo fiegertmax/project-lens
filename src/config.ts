@@ -141,12 +141,9 @@ export const AI_RESEARCH = {
   ].join('\n'),
 } as const;
 
-// Single source of truth for lens stage colors — sidebar panel and slope lines both read from here (LENS-02).
-export const STAGE_COLORS: Record<1 | 2 | 3, string> = {
-  1: '#2e9e5b',
-  2: '#e08a2e',
-  3: '#3b73c8',
-} as const;
+// The single lens color. Color elsewhere encodes country, so the lens uses one neutral
+// accent (the teal `--lens`) rather than per-instance colors.
+export const LENS_COLOR = '#0d9488';
 
-/** Lens year-span bounds used by the stage-based placed-lens system (Phase 4). */
-export const LENS_STAGE_WIDTH = { min: 3, max: 40, default: 10 } as const;
+/** Lens year-span bounds. No maximum: a single lens may span the whole visible range. */
+export const LENS_WIDTH = { min: 3, default: 10 } as const;

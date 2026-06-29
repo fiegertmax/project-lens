@@ -18,14 +18,12 @@ import type { AiResearchState } from '../state/AiResearchState';
 import { resolveSeries } from '../utils/interpolation';
 import { metricSpec, extraColumnFor } from '../utils/metricSpec';
 import type { LineDragCallbacks } from './drag-types';
-import type { LensSync } from './LensSync';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
 import { GdpSlopeChart } from './GdpSlopeChart';
 import { LensScatterPlot } from './LensScatterPlot';
 import { CrosshairOverlay } from './CrosshairOverlay';
 import { crossCountrySum } from '../utils/crossCountryMean';
-import type { StagedLensWindow } from './slope-types';
 
 export const CHART_MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
 const MARGIN = CHART_MARGIN;
@@ -62,7 +60,6 @@ function computeYDomain(entries: SeriesEntry[]): [number, number] {
  */
 export class EmissionsChart {
   readonly chartId: string;
-  readonly lensKey: string;
 
   private countries: string[];
   private readonly dataset: EmissionsDataset;
@@ -83,7 +80,6 @@ export class EmissionsChart {
   private readonly scatterPlot: LensScatterPlot;   // multi + per-capita
 
   private lensState: CountryLensState | null = null;
-  private lensSync: LensSync | null = null;
   private lensUnsub: (() => void) | null = null;
 
   private aiResearch: AiResearchState | null = null;
@@ -96,14 +92,12 @@ export class EmissionsChart {
 
   constructor(
     chartId: string,
-    lensKey: string,
     parent: HTMLElement,
     initialCountries: string[],
     dataset: EmissionsDataset,
     state: AppState,
   ) {
     this.chartId = chartId;
-    this.lensKey = lensKey;
     this.countries = [...initialCountries];
     this.dataset = dataset;
     this.state = state;
@@ -111,8 +105,7 @@ export class EmissionsChart {
     this.root = select(parent)
       .append('div')
       .attr('class', 'emissions-chart chart-area__row')
-      .attr('data-chart-id', chartId)
-      .attr('data-lens-key', lensKey);
+      .attr('data-chart-id', chartId);
 
     this.labelEl = this.root.append('div').attr('class', 'emissions-chart__label');
 
@@ -162,10 +155,9 @@ export class EmissionsChart {
     this.update();
   }
 
-  setLensState(state: CountryLensState, sync: LensSync): void {
+  setLensState(state: CountryLensState): void {
     this.lensUnsub?.();
     this.lensState = state;
-    this.lensSync = sync;
     this.lensUnsub = state.subscribe(() => this.renderLenses());
     this.renderLenses();
   }
@@ -191,15 +183,16 @@ export class EmissionsChart {
       this.countries.length === 1 &&
       this.state.metricMode() === 'absolute' &&
       !!this.lensState &&
-      this.lensState.lensesFor(this.lensKey).length > 0;
+      this.lensState.get() !== null;
     const active = eligible && st.mode() === 'selecting';
-    this.singleSlopeChart.setSelectable(active, () =>
+    this.singleSlopeChart.setSelectable(active, () => {
+      const lens = this.lensState!.get();
       st.select({
         country: this.countries[0],
-        lenses: this.lensState!.lensesFor(this.lensKey),
+        lenses: lens ? [lens] : [],
         includeLUC: this.state.includeLandUseChange(),
-      }),
-    );
+      });
+    });
   }
 
   update(): void {
@@ -239,7 +232,7 @@ export class EmissionsChart {
     if (this.isMulti()) this.renderLegend(this.countries, color, innerW);
     else this.clearLegend();
 
-    if (this.lensState && this.lensSync) {
+    if (this.lensState) {
       this.renderLensBandsInternal(x, yearRange, innerW, innerH);
     }
 
@@ -254,17 +247,17 @@ export class EmissionsChart {
       this.labelEl.text(this.countries[0] ?? '');
     }
 
-    // Re-render slope if lenses are active (preserves state after update() calls)
+    // Re-render slope if the lens is active (preserves state after update() calls)
     if (this.lensState) {
-      const lenses = this.lensState.lensesFor(this.lensKey);
-      if (lenses.length > 0) this.renderSlopeForState(lenses);
+      const lens = this.lensState.get();
+      if (lens) this.renderSlopeForState([lens]);
     }
   }
 
   private syncModeAttrs(): void {
     const multi = this.isMulti();
     this.root.classed('emissions-chart--multi', multi);
-    // data-country is used by LensStagePanel for per-capita GDP availability check
+    // data-country is used by LensPanel for the per-capita GDP availability check
     this.root.attr('data-country', !multi ? (this.countries[0] ?? null) : null);
     if (!multi && this.countries[0]) {
       this.labelEl.text(this.countries[0]);
@@ -278,8 +271,7 @@ export class EmissionsChart {
 
   private renderLenses(): void {
     if (!this.lensState) return;
-    const lenses = this.lensState.lensesFor(this.lensKey);
-    const active = lenses.length > 0;
+    const active = this.lensState.get() !== null;
     this.root.classed('emissions-chart--lens-active', active);
     this.update();
 
@@ -289,9 +281,8 @@ export class EmissionsChart {
     }
 
     requestAnimationFrame(() => {
-      if (!this.lensState) return;
-      const ls = this.lensState.lensesFor(this.lensKey);
-      if (ls.length > 0) this.renderSlopeForState(ls);
+      const lens = this.lensState?.get();
+      if (lens) this.renderSlopeForState([lens]);
     });
   }
 
@@ -319,7 +310,7 @@ export class EmissionsChart {
         const excludeSources = includeLUC ? undefined : new Set(['land_use_change_co2']);
         this.singleSlopeChart.render(
           this.countries[0],
-          lenses.map((l) => ({ stage: l.stage, startYear: l.startYear, endYear: l.endYear })),
+          lenses,
           undefined,
           excludeSources,
         );
@@ -347,13 +338,8 @@ export class EmissionsChart {
   }
 
   private renderSlopeMulti(lenses: PlacedLens[]): void {
-    const windows: StagedLensWindow[] = lenses.map((l) => ({
-      stage: l.stage,
-      startYear: l.startYear,
-      endYear: l.endYear,
-    }));
     const includeLUC = this.state.includeLandUseChange();
-    const aggregated = crossCountrySum(this.countries, windows, this.dataset, includeLUC);
+    const aggregated = crossCountrySum(this.countries, lenses, this.dataset, includeLUC);
     this.multiSlopeChart.renderAggregated(aggregated);
   }
 
@@ -544,22 +530,19 @@ export class EmissionsChart {
     innerW: number,
     innerH: number,
   ): void {
-    if (!this.lensState || !this.lensSync) return;
-    const lenses = this.lensState.lensesFor(this.lensKey);
+    if (!this.lensState) return;
     renderLensBandsHelper({
       plot: this.plot,
-      lenses,
+      lens: this.lensState.get(),
       x,
       yearRange,
       innerW,
       innerH,
-      key: this.lensKey,
       lensState: this.lensState,
-      lensSync: this.lensSync,
       getContainerWidth: () => this.lineCell.node()!.clientWidth || 600,
       onChange: () => {
-        const ls = this.lensState?.lensesFor(this.lensKey) ?? [];
-        if (ls.length > 0) requestAnimationFrame(() => this.renderSlopeForState(ls));
+        const lens = this.lensState?.get();
+        if (lens) requestAnimationFrame(() => this.renderSlopeForState([lens]));
         this.update();
       },
     });

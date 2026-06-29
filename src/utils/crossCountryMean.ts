@@ -1,5 +1,5 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-import type { AggregatedLensWindow, StagedLensWindow } from '../charts/slope-types';
+import type { AggregatedLensWindow, LensWindow } from '../charts/slope-types';
 import { EMISSION_SOURCES } from '../charts/slope-types';
 import { getSourceValue } from './getSourceValue';
 
@@ -33,7 +33,7 @@ function sumForSourceYear(
  */
 export function crossCountrySum(
   countries: string[],
-  lenses: StagedLensWindow[],
+  lenses: LensWindow[],
   dataset: EmissionsDataset,
   includeLUC = true,
 ): AggregatedLensWindow[] {

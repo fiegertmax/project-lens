@@ -1,23 +1,17 @@
-import type { LensStage } from '../state/CountryLensState';
 import { CO2_SOURCES } from '../config';
 
-/** Phase-3 stub: a lens is represented as a closed [startYear, endYear] interval. */
+/** A lens is represented as a closed [startYear, endYear] interval. */
 export interface LensWindow {
   startYear: number;
   endYear: number;
 }
 
-/** Extends LensWindow with stage metadata for per-stage slope coloring (LENS-05). */
-export interface StagedLensWindow extends LensWindow {
-  stage: LensStage;
-}
-
 /**
- * Pre-computed per-source mean values for the combined-chart slope panel.
+ * Pre-computed per-source values for the combined-chart slope panel.
  * Values cannot be looked up from a single country; the aggregator pre-computes
- * the cross-country mean for each source at each boundary year (CMEAN-02..04).
+ * the cross-country sum for each source at each boundary year (CMEAN-02..04).
  */
-export interface AggregatedLensWindow extends StagedLensWindow {
+export interface AggregatedLensWindow extends LensWindow {
   values: Map<string, { left: number | undefined; right: number | undefined }>;
 }
 

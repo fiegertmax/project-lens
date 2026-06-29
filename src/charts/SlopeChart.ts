@@ -1,10 +1,10 @@
-import { axisRight, format, scaleSymlog, select } from 'd3';
-import type { ScaleSymLog, Selection } from 'd3';
+import { axisRight, format, scaleLinear, select } from 'd3';
+import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-import { STAGE_COLORS } from '../config';
+import { LENS_COLOR } from '../config';
 import { getSourceValue } from '../utils/getSourceValue';
 import { EMISSION_SOURCES } from './slope-types';
-import type { AggregatedLensWindow, StagedLensWindow } from './slope-types';
+import type { AggregatedLensWindow, LensWindow } from './slope-types';
 
 // Matches the line chart height; right margin reserves space for source labels + scale
 const MARGIN = { top: 20, right: 110, bottom: 28, left: 10 };
@@ -15,7 +15,7 @@ const MIN_LABEL_GAP = 12;
 const YEAR_FORMAT = format('d');
 const DELTA_FORMAT = format(',.2f');
 
-type LogScale = ScaleSymLog<number, number>;
+type LogScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
 type PlotLayer = Selection<SVGGElement, null, SVGGElement, unknown>;
 
@@ -30,7 +30,7 @@ interface SourceEntry {
 
 /**
  * Parallel-coordinates panel for one lensed country.
- * N vertical axis lines (one per boundary year) with colored source lines per stage,
+ * N vertical axis lines (one per boundary year) with colored source lines,
  * plus a decoupled value scale on the right.
  */
 export class SlopeChart {
@@ -88,7 +88,7 @@ export class SlopeChart {
    */
   render(
     country: string,
-    lenses: StagedLensWindow[],
+    lenses: LensWindow[],
     yDomain?: [number, number],
     excludeSources?: ReadonlySet<string>,
   ): void {
@@ -108,7 +108,7 @@ export class SlopeChart {
     const columns = this.columnPositions(lenses, innerW);
 
     // Collect all source entries across all lenses to build a shared y-axis.
-    const allEntries: SourceEntry[][] = lenses.map((lens) => this.buildEntries(country, lens, excludeSources));
+    const allEntries: SourceEntry[][] = lenses.map((lens, i) => this.buildEntries(country, lens, i, excludeSources));
 
     // Use the caller-supplied domain (line chart's y-axis) when available so source slopes
     // are readable at the same scale as the main chart. Fall back to auto-fit from source values.
@@ -123,7 +123,7 @@ export class SlopeChart {
       domainMin = allValues.length ? Math.min(...allValues) : 0;
       domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
     }
-    const y: LogScale = scaleSymlog().domain([domainMin, domainMax]).range([innerH, 0]);
+    const y: LogScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
 
     this.renderAxes(columns, lenses, innerH);
     this.renderAllLines(lenses, allEntries, columns, y);
@@ -151,9 +151,9 @@ export class SlopeChart {
     const columns = this.columnPositions(lenses, innerW);
 
     // Build SourceEntry[][] from pre-computed values instead of per-country getSourceValue calls.
-    const allEntries: SourceEntry[][] = lenses.map((lens) =>
+    const allEntries: SourceEntry[][] = lenses.map((lens, i) =>
       EMISSION_SOURCES.map((src) => ({
-        key: `${lens.stage}-${src.key}`,
+        key: `${i}-${src.key}`,
         label: src.label,
         description: src.description,
         color: src.color,
@@ -173,7 +173,7 @@ export class SlopeChart {
       domainMin = allValues.length ? Math.min(...allValues) : 0;
       domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
     }
-    const y: LogScale = scaleSymlog().domain([domainMin, domainMax]).range([innerH, 0]);
+    const y: LogScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
 
     this.renderAxes(columns, lenses, innerH);
     this.renderAllLines(lenses, allEntries, columns, y);
@@ -185,7 +185,7 @@ export class SlopeChart {
    * Computes x positions for each boundary year column.
    * N lenses produce N+1 unique columns; shared boundaries (SLOPE-05) get one x position.
    */
-  private columnPositions(lenses: StagedLensWindow[], innerW: number): Map<number, number> {
+  private columnPositions(lenses: LensWindow[], innerW: number): Map<number, number> {
     // Collect unique years in order; consecutive lenses share a boundary.
     const uniqueYears: number[] = [];
     for (const lens of lenses) {
@@ -202,9 +202,9 @@ export class SlopeChart {
   }
 
   /** Builds the source entries for a single lens. Excluded sources produce undefined values. */
-  private buildEntries(country: string, lens: StagedLensWindow, excludeSources?: ReadonlySet<string>): SourceEntry[] {
+  private buildEntries(country: string, lens: LensWindow, index: number, excludeSources?: ReadonlySet<string>): SourceEntry[] {
     return EMISSION_SOURCES.map((src) => ({
-      key: `${lens.stage}-${src.key}`,
+      key: `${index}-${src.key}`,
       label: src.label,
       description: src.description,
       color: src.color,
@@ -216,7 +216,7 @@ export class SlopeChart {
   /** Renders vertical axis lines + year labels for each boundary column. */
   private renderAxes(
     columns: Map<number, number>,
-    lenses: StagedLensWindow[],
+    lenses: LensWindow[],
     innerH: number,
   ): void {
     const g = this.group('axes');
@@ -245,11 +245,10 @@ export class SlopeChart {
       .attr('text-anchor', 'middle')
       .text((d) => YEAR_FORMAT(d.year));
 
-    // Stage color indicators: small tinted lines at top of each lens segment.
+    // Lens segment indicator: a small tinted line at the top of each lens segment.
     const segmentData = lenses.map((lens) => ({
       x1: columns.get(lens.startYear)!,
       x2: columns.get(lens.endYear)!,
-      color: STAGE_COLORS[lens.stage],
     }));
     g.selectAll<SVGLineElement, (typeof segmentData)[number]>('line.slope-chart__stage-bar')
       .data(segmentData)
@@ -259,18 +258,13 @@ export class SlopeChart {
       .attr('y1', -8)
       .attr('x2', (d) => d.x2)
       .attr('y2', -8)
-      .attr('stroke', (d) => d.color)
+      .attr('stroke', LENS_COLOR)
       .attr('stroke-width', 3);
-
-    // Drop lens segments where axes already account for them.
-    // Remove old content explicitly so stale entries from a prior render don't persist.
-    const _ = lenses;
-    void _;
   }
 
-  /** Renders all per-stage line sets and inter-lens connectors into the shared 'lines' layer. */
+  /** Renders all per-window line sets and inter-lens connectors into the shared 'lines' layer. */
   private renderAllLines(
-    lenses: StagedLensWindow[],
+    lenses: LensWindow[],
     allEntries: SourceEntry[][],
     columns: Map<number, number>,
     y: LogScale,
@@ -353,7 +347,7 @@ export class SlopeChart {
       (s) => s.leftValue !== undefined && s.rightValue !== undefined,
     );
 
-    // Each stage-source gets a unique class key so multiple stages don't clash.
+    // Each window-source gets a unique class key so multiple windows don't clash.
     g.selectAll<SVGLineElement, SourceEntry>(`line.${cssKey(entries[0]?.key ?? 'l')}`)
       .data(drawable, (d) => d.key)
       .join('line')

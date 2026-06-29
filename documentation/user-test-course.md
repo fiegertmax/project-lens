@@ -10,14 +10,14 @@
 ## Professor
 
 ### Scatterplot
-- the scatterplot should switch to the hcl (hue, chroma, luminence) color space
-- hue can keep determining the country
-- luminence can determine the time / year
+- (DONE) the scatterplot should switch to the hcl (hue, chroma, luminence) color space
+- (DONE) hue can keep determining the country
+- (DONE) luminence can determine the time / year
 - (DONE) when highlighting a country by hovering, the dots in the scatterplot and the country in the legend must be highlighted
 
 ### Lens
-- having different colors for the lenses makes little sense here
-- parallel coordinated views: If the lenses are coordinated, the should be FULLY coordinated --> removing the lens with x removes them all; clicking 'find reasons' should keep the other lenses as well, ...
+- (DONE) having different colors for the lenses makes little sense here
+- (DONE) parallel coordinated views: If the lenses are coordinated, the should be FULLY coordinated --> removing the lens with x removes them all; clicking 'find reasons' should keep the other lenses as well, ...
 
 ### Slope Chart
 - does the slope chart really make sense here? check whether we can show this differently

@@ -12,7 +12,7 @@ import type { YearRange } from './state/AppState';
 import { CountryLensState } from './state/CountryLensState';
 import { AiResearchState } from './state/AiResearchState';
 import { ConfigPanel } from './ui/ConfigPanel';
-import { LensStagePanel } from './ui/LensStagePanel';
+import { LensPanel } from './ui/LensPanel';
 import { AiResearchPanel } from './ui/AiResearchPanel';
 
 /** Composition root: loads data, wires state to the panel and chart stack. */
@@ -53,7 +53,7 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds, lensState);
-    new LensStagePanel(sidebar, lensState, state, dataset);
+    new LensPanel(sidebar, lensState, state, dataset);
     const aiResearchPanel = new AiResearchPanel(sidebar, aiResearch, dataset);
     const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState, aiResearch);
 

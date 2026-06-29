@@ -3,11 +3,9 @@ import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { MetricDefinition } from '../data/types';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState } from '../state/CountryLensState';
-import { COMBINED_CHART_KEY } from '../state/CountryLensState';
 import type { AiResearchState } from '../state/AiResearchState';
 import { EmissionsChart } from './EmissionsChart';
 import type { LineDragCallbacks } from './drag-types';
-import { LensSync } from './LensSync';
 
 const MAIN_CHART_ID = '__main__';
 let _rowCounter = 0;
@@ -19,7 +17,6 @@ type DropTarget =
 
 interface ChartGroup {
   chartId: string;
-  lensKey: string;
   countries: string[];
 }
 
@@ -34,13 +31,11 @@ export class ChartArea {
   private readonly unsub: () => void;
 
   private readonly lensState: CountryLensState;
-  private readonly lensSync: LensSync;
   private readonly aiResearch: AiResearchState;
 
   // Main chart — always present, always receives newly selected countries
   private readonly mainGroup: ChartGroup = {
     chartId: MAIN_CHART_ID,
-    lensKey: COMBINED_CHART_KEY,
     countries: [],
   };
   private readonly mainChart: EmissionsChart;
@@ -68,7 +63,6 @@ export class ChartArea {
     this.state = state;
     void metric;
     this.lensState = lensState;
-    this.lensSync = new LensSync(lensState);
     this.aiResearch = aiResearch;
 
     this.div = document.createElement('div');
@@ -84,13 +78,12 @@ export class ChartArea {
 
     this.mainChart = new EmissionsChart(
       MAIN_CHART_ID,
-      COMBINED_CHART_KEY,
       this.rowContainer,
       [],
       dataset,
       state,
     );
-    this.mainChart.setLensState(this.lensState, this.lensSync);
+    this.mainChart.setLensState(this.lensState);
     this.mainChart.setAiResearch(this.aiResearch);
 
     this.dropSpacer = document.createElement('div');
@@ -175,13 +168,12 @@ export class ChartArea {
       if (!chart) {
         chart = new EmissionsChart(
           group.chartId,
-          group.lensKey,
           this.rowContainer,
           group.countries,
           this.dataset,
           this.state,
         );
-        chart.setLensState(this.lensState, this.lensSync);
+        chart.setLensState(this.lensState);
         chart.setAiResearch(this.aiResearch);
         this.rowCharts.set(group.chartId, chart);
       }
@@ -309,7 +301,7 @@ export class ChartArea {
         // Remove country from wherever it is; create a new single-country row chart
         this.removeFromSource(country);
         const newChartId = `__row-${_rowCounter++}__`;
-        this.rowGroups.push({ chartId: newChartId, lensKey: country, countries: [country] });
+        this.rowGroups.push({ chartId: newChartId, countries: [country] });
         this.reconcile();
         break;
       }

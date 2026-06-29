@@ -116,7 +116,7 @@ export class LensScatterPlot {
           if (!Number.isFinite(co2PerCap) || co2PerCap <= 0) continue;
           if (gdpPerCap === undefined || gdpPerCap <= 0) continue;
           points.push({
-            key: `${country}-${year}-${lens.stage}`,
+            key: `${country}-${year}`,
             country,
             year,
             co2PerCap,

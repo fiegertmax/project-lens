@@ -1,7 +1,7 @@
 import { axisLeft, format, scaleLinear, select } from 'd3';
 import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
-import { STAGE_COLORS } from '../config';
+import { LENS_COLOR } from '../config';
 import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import type { PlacedLens } from '../state/CountryLensState';
 
@@ -154,7 +154,7 @@ export class GdpSlopeChart {
       .data(lenses.map((l) => ({
         x1: columns.get(l.startYear)!,
         x2: columns.get(l.endYear)!,
-        color: STAGE_COLORS[l.stage],
+        color: LENS_COLOR,
       })))
       .join('line')
       .attr('class', 'gdp-slope-chart__stage-bar')

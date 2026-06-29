@@ -1,8 +1,7 @@
 import { drag, scaleLinear, select } from 'd3';
 import type { D3DragEvent, ScaleLinear, Selection } from 'd3';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
-import { LENS_STAGE_WIDTH, STAGE_COLORS } from '../config';
-import type { LensSync } from './LensSync';
+import { LENS_WIDTH, LENS_COLOR } from '../config';
 
 // Mirrors the chart MARGIN (left 72, right 64) so live-drag re-measure width matches the rendered axes.
 const BAND_MARGIN = { left: 72, right: 64 };
@@ -11,10 +10,10 @@ const BAND_MARGIN = { left: 72, right: 64 };
 const EDGE_HANDLE_PX = 8;
 
 export interface LensBandRenderOptions {
-  /** The SVG g to render bands into. */
+  /** The SVG g to render the band into. */
   plot: Selection<SVGGElement, unknown, null, undefined>;
-  /** Caller passes lensState.lensesFor(key). */
-  lenses: PlacedLens[];
+  /** The single shared lens, or null when none is placed. */
+  lens: PlacedLens | null;
   /** Year to pixel x scale. */
   x: ScaleLinear<number, number>;
   /** Visible domain, for clamping band edges. */
@@ -23,10 +22,7 @@ export interface LensBandRenderOptions {
   innerW: number;
   /** Inner plot height in px. */
   innerH: number;
-  /** Country name or COMBINED_CHART_KEY — identifies which lens set to mutate. */
-  key: string;
   lensState: CountryLensState;
-  lensSync: LensSync;
   /** Live container width used during drag re-measurement. */
   getContainerWidth: () => number;
   /** Fired on drag-end and wheel-end so the caller can re-render slope/chart. */
@@ -34,9 +30,9 @@ export interface LensBandRenderOptions {
 }
 
 /**
- * Draws stage-colored lens bands, year labels, and remove buttons for any chart key.
+ * Draws the single lens band, year labels, and remove button for any chart.
  * Attaches center x-drag (move), edge drag (resize), and Ctrl/Cmd+wheel (resize) handlers.
- * Key-parameterized so it works for both single-country charts and the combined chart.
+ * Because all charts share one lens in state, every gesture coordinates across them.
  */
 export function renderLensBands(opts: LensBandRenderOptions): void {
   // Idempotent group creation.
@@ -46,17 +42,19 @@ export function renderLensBands(opts: LensBandRenderOptions): void {
     .join('g')
     .attr('class', 'lens-band');
 
-  if (opts.lenses.length === 0) {
+  // Data-join over [lens] (or []) so the band cleanly appears/disappears with state.
+  const lenses = opts.lens ? [opts.lens] : [];
+  if (lenses.length === 0) {
     bandGroup.selectAll('*').remove();
     return;
   }
 
   const yearsPerPixel = (opts.yearRange[1] - opts.yearRange[0]) / opts.innerW;
 
-  // One rect per placed lens, keyed by id — center drag moves the lens.
+  // The band rect — center drag moves the lens.
   bandGroup
     .selectAll<SVGRectElement, PlacedLens>('rect.placed-lens__rect')
-    .data(opts.lenses, (d) => d.id)
+    .data(lenses, (d) => d.id)
     .join('rect')
     .attr('class', 'placed-lens__rect')
     .attr('data-lens-id', (d) => d.id)
@@ -68,16 +66,16 @@ export function renderLensBands(opts: LensBandRenderOptions): void {
       return Math.max(0, ex - bx);
     })
     .attr('height', opts.innerH)
-    .attr('fill', (d) => STAGE_COLORS[d.stage])
+    .attr('fill', LENS_COLOR)
     .attr('fill-opacity', 0.18)
-    .attr('stroke', (d) => STAGE_COLORS[d.stage])
+    .attr('stroke', LENS_COLOR)
     .attr('stroke-width', 1.5)
     .attr('cursor', 'grab')
     .call(makeLensDragLocal(opts, yearsPerPixel))
     .on('wheel.lens', (ev: WheelEvent, d) => handleLensWheelLocal(ev, d, opts));
 
   // Year labels at band edges
-  const labelData = opts.lenses.flatMap((d) => [
+  const labelData = lenses.flatMap((d) => [
     { x: opts.x(Math.max(opts.yearRange[0], d.startYear)), year: d.startYear, anchor: 'start' as const },
     { x: opts.x(Math.min(opts.yearRange[1], d.endYear)), year: d.endYear, anchor: 'end' as const },
   ]);
@@ -92,28 +90,10 @@ export function renderLensBands(opts: LensBandRenderOptions): void {
     .attr('text-anchor', (d) => d.anchor)
     .text((d) => String(d.year));
 
-  // Remove button: × at the top-right of each band
-  bandGroup
-    .selectAll<SVGTextElement, PlacedLens>('text.placed-lens__remove')
-    .data(opts.lenses, (d) => d.id)
-    .join('text')
-    .attr('class', 'placed-lens__remove')
-    .attr('x', (d) => opts.x(Math.min(opts.yearRange[1], d.endYear)) - 3)
-    .attr('y', 14)
-    .attr('text-anchor', 'end')
-    .attr('font-size', '13px')
-    .attr('fill', (d) => STAGE_COLORS[d.stage])
-    .attr('cursor', 'pointer')
-    .text('×')
-    .on('click', (ev, d) => {
-      ev.stopPropagation();
-      opts.lensState.removeLens(opts.key, d.id);
-    });
-
-  // Left edge handles — dragging resizes the start boundary.
+  // Left edge handle — dragging resizes the start boundary.
   bandGroup
     .selectAll<SVGRectElement, PlacedLens>('rect.placed-lens__edge-left')
-    .data(opts.lenses, (d) => d.id)
+    .data(lenses, (d) => d.id)
     .join('rect')
     .attr('class', 'placed-lens__edge-left')
     .attr('data-lens-id', (d) => d.id)
@@ -125,10 +105,10 @@ export function renderLensBands(opts: LensBandRenderOptions): void {
     .attr('cursor', 'col-resize')
     .call(makeLeftEdgeDragLocal(opts, yearsPerPixel));
 
-  // Right edge handles — dragging resizes the end boundary.
+  // Right edge handle — dragging resizes the end boundary.
   bandGroup
     .selectAll<SVGRectElement, PlacedLens>('rect.placed-lens__edge-right')
-    .data(opts.lenses, (d) => d.id)
+    .data(lenses, (d) => d.id)
     .join('rect')
     .attr('class', 'placed-lens__edge-right')
     .attr('data-lens-id', (d) => d.id)
@@ -139,10 +119,28 @@ export function renderLensBands(opts: LensBandRenderOptions): void {
     .attr('fill', 'transparent')
     .attr('cursor', 'col-resize')
     .call(makeRightEdgeDragLocal(opts, yearsPerPixel));
+
+  // Remove button: × at the top-right of the band — rendered last so it sits above edge handles.
+  bandGroup
+    .selectAll<SVGTextElement, PlacedLens>('text.placed-lens__remove')
+    .data(lenses, (d) => d.id)
+    .join('text')
+    .attr('class', 'placed-lens__remove')
+    .attr('x', (d) => opts.x(Math.min(opts.yearRange[1], d.endYear)) - 3)
+    .attr('y', 14)
+    .attr('text-anchor', 'end')
+    .attr('font-size', '13px')
+    .attr('fill', LENS_COLOR)
+    .attr('cursor', 'pointer')
+    .text('×')
+    .on('click', (ev) => {
+      ev.stopPropagation();
+      opts.lensState.clear();
+    });
 }
 
 /**
- * Returns a d3 drag behaviour that moves the dragged lens via LensSync.
+ * Returns a d3 drag behaviour that moves the shared lens.
  * Live position update happens on 'drag'; onChange fires on 'end' for slope re-render.
  */
 function makeLensDragLocal(
@@ -154,12 +152,11 @@ function makeLensDragLocal(
       document.body.classList.add('lens-band-dragging');
       window.dispatchEvent(new CustomEvent('lens-drag-start'));
     })
-    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
+    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>) => {
       const delta = ev.dx * yearsPerPixel;
-      opts.lensSync.moveLinkedLens(opts.key, d.id, delta, opts.yearRange);
+      opts.lensState.move(delta, opts.yearRange);
       // Update band position live for immediate visual feedback
-      const updatedLenses = opts.lensState.lensesFor(opts.key);
-      const updated = updatedLenses.find((l) => l.id === d.id);
+      const updated = opts.lensState.get();
       if (updated) {
         const rect = ev.sourceEvent.target as SVGRectElement;
         const yr = opts.yearRange;
@@ -187,10 +184,10 @@ function makeLeftEdgeDragLocal(
       document.body.classList.add('lens-band-edge-resizing');
       window.dispatchEvent(new CustomEvent('lens-drag-start'));
     })
-    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
+    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>) => {
       const delta = ev.dx * yearsPerPixel;
-      opts.lensSync.resizeLinkedLensLeft(opts.key, d.id, delta, opts.yearRange);
-      liveUpdateBandRect(opts, d.id);
+      opts.lensState.resizeLeft(delta, opts.yearRange);
+      liveUpdateBandRect(opts);
     })
     .on('end', () => {
       document.body.classList.remove('lens-band-edge-resizing');
@@ -208,10 +205,10 @@ function makeRightEdgeDragLocal(
       document.body.classList.add('lens-band-edge-resizing');
       window.dispatchEvent(new CustomEvent('lens-drag-start'));
     })
-    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>, d) => {
+    .on('drag', (ev: D3DragEvent<SVGRectElement, PlacedLens, unknown>) => {
       const delta = ev.dx * yearsPerPixel;
-      opts.lensSync.resizeLinkedLensRight(opts.key, d.id, delta, opts.yearRange);
-      liveUpdateBandRect(opts, d.id);
+      opts.lensState.resizeRight(delta, opts.yearRange);
+      liveUpdateBandRect(opts);
     })
     .on('end', () => {
       document.body.classList.remove('lens-band-edge-resizing');
@@ -219,9 +216,9 @@ function makeRightEdgeDragLocal(
     });
 }
 
-/** Re-positions the main band rect and edge handles for `lensId` after a resize gesture. */
-function liveUpdateBandRect(opts: LensBandRenderOptions, lensId: string): void {
-  const updated = opts.lensState.lensesFor(opts.key).find((l) => l.id === lensId);
+/** Re-positions the band rect and edge handles after a resize gesture. */
+function liveUpdateBandRect(opts: LensBandRenderOptions): void {
+  const updated = opts.lensState.get();
   if (!updated) return;
 
   const yr = opts.yearRange;
@@ -230,16 +227,16 @@ function liveUpdateBandRect(opts: LensBandRenderOptions, lensId: string): void {
   const newX = xScale(Math.max(yr[0], updated.startYear));
   const newW = Math.max(0, xScale(Math.min(yr[1], updated.endYear)) - newX);
 
-  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__rect[data-lens-id="${lensId}"]`)
+  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__rect[data-lens-id="${updated.id}"]`)
     .attr('x', newX).attr('width', newW);
-  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__edge-left[data-lens-id="${lensId}"]`)
+  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__edge-left[data-lens-id="${updated.id}"]`)
     .attr('x', newX);
-  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__edge-right[data-lens-id="${lensId}"]`)
+  opts.plot.select<SVGRectElement>(`g.lens-band rect.placed-lens__edge-right[data-lens-id="${updated.id}"]`)
     .attr('x', newX + newW - EDGE_HANDLE_PX);
 }
 
 /**
- * Handles Ctrl/Cmd+wheel over a lens band: resizes the lens via LensSync (LENSUI-02).
+ * Handles Ctrl/Cmd+wheel over the lens band: resizes the lens (LENSUI-02).
  * Normal scroll is untouched (T-05-02 threat mitigated).
  */
 function handleLensWheelLocal(
@@ -253,10 +250,7 @@ function handleLensWheelLocal(
   const currentSpan = lens.endYear - lens.startYear;
   // deltaY > 0 = scroll down = shrink; < 0 = scroll up = grow
   const step = ev.deltaY > 0 ? -1 : 1;
-  const newSpan = Math.min(
-    LENS_STAGE_WIDTH.max,
-    Math.max(LENS_STAGE_WIDTH.min, currentSpan + step),
-  );
-  opts.lensSync.resizeLinkedLens(opts.key, lens.id, newSpan, opts.yearRange);
+  const newSpan = Math.max(LENS_WIDTH.min, currentSpan + step);
+  opts.lensState.resize(newSpan, opts.yearRange);
   opts.onChange?.();
 }

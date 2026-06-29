@@ -1,6 +1,6 @@
 /** Shared inline SVGs; they paint with currentColor so CSS controls the colour. */
 
-/** Magnifying-glass lens — reused by the apply button, the drag ghost, and the staged sidebar icons (LensStagePanel). Stage colour is applied via CSS `.lens-stage-icon--stage-N`; no per-stage SVG copy is needed. */
+/** Magnifying-glass lens — reused by the apply button, the drag ghost, and the sidebar lens icon (LensPanel). Colour comes from CSS via currentColor. */
 export const LENS_ICON = `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
   <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="2"/>
   <line x1="15.2" y1="15.2" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
