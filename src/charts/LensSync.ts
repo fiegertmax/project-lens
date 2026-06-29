@@ -47,6 +47,24 @@ export class LensSync {
     for (const t of targets) this.state.resizeLens(t.country, t.id, newSpan, yearRange);
   }
 
+  /** Resizes the left (start) boundary of the lens and fans to all same-stage siblings. */
+  resizeLinkedLensLeft(originCountry: string, originId: string, deltaYears: number, yearRange?: [number, number]): void {
+    const origin = this.findLens(originCountry, originId);
+    if (!origin) return;
+    const targets = this.gestureTargets(origin.stage, originCountry, originId);
+    if (!targets.every(t => this.state.canResizeLensLeft(t.country, t.id, deltaYears, yearRange))) return;
+    for (const t of targets) this.state.resizeLensLeft(t.country, t.id, deltaYears, yearRange);
+  }
+
+  /** Resizes the right (end) boundary of the lens and fans to all same-stage siblings. */
+  resizeLinkedLensRight(originCountry: string, originId: string, deltaYears: number, yearRange?: [number, number]): void {
+    const origin = this.findLens(originCountry, originId);
+    if (!origin) return;
+    const targets = this.gestureTargets(origin.stage, originCountry, originId);
+    if (!targets.every(t => this.state.canResizeLensRight(t.country, t.id, deltaYears, yearRange))) return;
+    for (const t of targets) this.state.resizeLensRight(t.country, t.id, deltaYears, yearRange);
+  }
+
   // --- private helpers ---
 
   private findLens(country: string, id: string) {

@@ -594,6 +594,11 @@ body.lens-dragging {
   user-select: none;
 }
 
+body.lens-band-edge-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 .emissions-chart--drop {
   outline: 2px dashed var(--lens-border);
   outline-offset: 3px;

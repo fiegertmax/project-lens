@@ -124,6 +124,24 @@ export class CountryLensState {
     return this.canApplyGesture(country, id, (lens) => this.computeResize(lens, newSpan, yearRange));
   }
 
+  /** Moves only the left (start) boundary by deltaYears, keeping endYear fixed. */
+  resizeLensLeft(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
+    return this.applyGesture(country, id, (lens) => this.computeResizeLeft(lens, deltaYears, yearRange));
+  }
+
+  canResizeLensLeft(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
+    return this.canApplyGesture(country, id, (lens) => this.computeResizeLeft(lens, deltaYears, yearRange));
+  }
+
+  /** Moves only the right (end) boundary by deltaYears, keeping startYear fixed. */
+  resizeLensRight(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
+    return this.applyGesture(country, id, (lens) => this.computeResizeRight(lens, deltaYears, yearRange));
+  }
+
+  canResizeLensRight(country: string, id: string, deltaYears: number, yearRange?: [number, number]): boolean {
+    return this.canApplyGesture(country, id, (lens) => this.computeResizeRight(lens, deltaYears, yearRange));
+  }
+
   /** Removes a lens by id and fires notify. */
   removeLens(country: string, id: string): void {
     const lenses = this.byCountry.get(country);
@@ -187,6 +205,26 @@ export class CountryLensState {
       }
     }
     return { ...lens, startYear: newStart, endYear: newEnd };
+  }
+
+  /** Moves only startYear, keeping endYear fixed; clamps span to [min, max]. */
+  private computeResizeLeft(lens: PlacedLens, deltaYears: number, yearRange?: [number, number]): PlacedLens {
+    const rawStart = lens.startYear + deltaYears;
+    const span = lens.endYear - rawStart;
+    const clampedSpan = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, span));
+    let newStart = Math.round(lens.endYear - clampedSpan);
+    if (yearRange) newStart = Math.max(yearRange[0], newStart);
+    return { ...lens, startYear: newStart };
+  }
+
+  /** Moves only endYear, keeping startYear fixed; clamps span to [min, max]. */
+  private computeResizeRight(lens: PlacedLens, deltaYears: number, yearRange?: [number, number]): PlacedLens {
+    const rawEnd = lens.endYear + deltaYears;
+    const span = rawEnd - lens.startYear;
+    const clampedSpan = Math.min(LENS_STAGE_WIDTH.max, Math.max(LENS_STAGE_WIDTH.min, span));
+    let newEnd = Math.round(lens.startYear + clampedSpan);
+    if (yearRange) newEnd = Math.min(yearRange[1], newEnd);
+    return { ...lens, endYear: newEnd };
   }
 
   /** Computes the resized-and-clamped lens for a resize gesture (pure, no mutation). */
