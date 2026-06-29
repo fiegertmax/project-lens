@@ -4,7 +4,23 @@ import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { LENS_COLOR } from '../config';
 import { getSourceValue } from '../utils/getSourceValue';
 import { EMISSION_SOURCES } from './slope-types';
-import type { AggregatedLensWindow, LensWindow } from './slope-types';
+import type { LensWindow } from './slope-types';
+
+/** Per-metric tuning: which source columns to read and how to label values. */
+export interface SlopeOptions {
+  /** Appended to each source key, e.g. '_per_capita'. Empty for absolute totals. */
+  sourceSuffix: string;
+  /** Vertical scale unit label (e.g. 'million tonnes'). */
+  unitLabel: string;
+  /** Tooltip delta unit suffix (e.g. 'Mt'). */
+  deltaUnit: string;
+}
+
+const ABSOLUTE_OPTIONS: SlopeOptions = {
+  sourceSuffix: '',
+  unitLabel: 'million tonnes',
+  deltaUnit: 'Mt',
+};
 
 // Matches the line chart height; right margin reserves space for source labels + scale
 const MARGIN = { top: 20, right: 110, bottom: 28, left: 10 };
@@ -39,6 +55,9 @@ export class SlopeChart {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
   private readonly tooltip: HTMLDivElement;
+
+  // Set per render() so async tooltip handlers and the value scale use the active units.
+  private options: SlopeOptions = ABSOLUTE_OPTIONS;
 
   constructor(parent: HTMLElement, dataset: EmissionsDataset) {
     this.dataset = dataset;
@@ -91,11 +110,13 @@ export class SlopeChart {
     lenses: LensWindow[],
     yDomain?: [number, number],
     excludeSources?: ReadonlySet<string>,
+    options: SlopeOptions = ABSOLUTE_OPTIONS,
   ): void {
     if (lenses.length === 0) {
       this.clear();
       return;
     }
+    this.options = options;
 
     this.root.style('display', null);
     const width = this.root.node()!.clientWidth || 300;
@@ -112,56 +133,6 @@ export class SlopeChart {
 
     // Use the caller-supplied domain (line chart's y-axis) when available so source slopes
     // are readable at the same scale as the main chart. Fall back to auto-fit from source values.
-    let domainMin: number;
-    let domainMax: number;
-    if (yDomain) {
-      [domainMin, domainMax] = yDomain;
-    } else {
-      const allValues = allEntries.flat().flatMap((s) =>
-        [s.leftValue, s.rightValue].filter((v): v is number => v !== undefined),
-      );
-      domainMin = allValues.length ? Math.min(...allValues) : 0;
-      domainMax = allValues.length ? Math.max(...allValues) || 1 : 1;
-    }
-    const y: LogScale = scaleLinear().domain([domainMin, domainMax]).nice().range([innerH, 0]);
-
-    this.renderAxes(columns, lenses, innerH);
-    this.renderAllLines(lenses, allEntries, columns, y);
-    this.renderAllLabels(allEntries, columns, y, innerW);
-    this.renderScale(y, innerW, innerH);
-  }
-
-  /**
-   * Render path for pre-aggregated (summed) cross-country values. A separate method is
-   * needed because values cannot be looked up from a single country.
-   */
-  renderAggregated(lenses: AggregatedLensWindow[], yDomain?: [number, number]): void {
-    if (lenses.length === 0) {
-      this.clear();
-      return;
-    }
-
-    this.root.style('display', null);
-    const width = this.root.node()!.clientWidth || 300;
-    const innerW = width - MARGIN.left - MARGIN.right;
-    const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
-
-    this.svg.attr('width', width).attr('height', HEIGHT);
-
-    const columns = this.columnPositions(lenses, innerW);
-
-    // Build SourceEntry[][] from pre-computed values instead of per-country getSourceValue calls.
-    const allEntries: SourceEntry[][] = lenses.map((lens, i) =>
-      EMISSION_SOURCES.map((src) => ({
-        key: `${i}-${src.key}`,
-        label: src.label,
-        description: src.description,
-        color: src.color,
-        leftValue: lens.values.get(src.key)?.left,
-        rightValue: lens.values.get(src.key)?.right,
-      })),
-    );
-
     let domainMin: number;
     let domainMax: number;
     if (yDomain) {
@@ -203,14 +174,19 @@ export class SlopeChart {
 
   /** Builds the source entries for a single lens. Excluded sources produce undefined values. */
   private buildEntries(country: string, lens: LensWindow, index: number, excludeSources?: ReadonlySet<string>): SourceEntry[] {
-    return EMISSION_SOURCES.map((src) => ({
-      key: `${index}-${src.key}`,
-      label: src.label,
-      description: src.description,
-      color: src.color,
-      leftValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.startYear),
-      rightValue: excludeSources?.has(src.key) ? undefined : getSourceValue(this.dataset, country, src.key, lens.endYear),
-    }));
+    const suffix = this.options.sourceSuffix;
+    return EMISSION_SOURCES.map((src) => {
+      const excluded = excludeSources?.has(src.key);
+      const col = src.key + suffix;
+      return {
+        key: `${index}-${src.key}`,
+        label: src.label,
+        description: src.description,
+        color: src.color,
+        leftValue: excluded ? undefined : getSourceValue(this.dataset, country, col, lens.startYear),
+        rightValue: excluded ? undefined : getSourceValue(this.dataset, country, col, lens.endYear),
+      };
+    });
   }
 
   /** Renders vertical axis lines + year labels for each boundary column. */
@@ -290,13 +266,15 @@ export class SlopeChart {
       this.renderConnectorLines(g, allEntries[i], allEntries[i + 1], y, x1, x2);
     }
 
-    // "No data" notice when nothing is drawable across all lenses.
+    // "No data" notice centered in the plot when nothing is drawable.
+    const innerH = y.range()[0];
+    const innerW = Math.max(0, ...columns.values());
     g.selectAll<SVGTextElement, string>('text.slope-chart__empty')
       .data(anyDrawable ? [] : ['No data for lens range'])
       .join('text')
       .attr('class', 'slope-chart__empty')
-      .attr('x', 0)
-      .attr('y', 0)
+      .attr('x', innerW / 2)
+      .attr('y', innerH / 2)
       .attr('text-anchor', 'middle')
       .attr('font-size', '11px')
       .attr('fill', 'var(--text-muted)')
@@ -438,7 +416,7 @@ export class SlopeChart {
 
     // Unit label rotated vertically beside the scale ticks
     g.selectAll<SVGTextElement, string>('text.slope-chart__scale-title')
-      .data(['million tonnes'])
+      .data([this.options.unitLabel])
       .join('text')
       .attr('class', 'slope-chart__scale-title')
       .attr('transform', `translate(36, ${innerH / 2}) rotate(-90)`)
@@ -488,7 +466,7 @@ export class SlopeChart {
 
     const val = document.createElement('span');
     val.className = 'crosshair-tooltip__value';
-    val.textContent = `${sign}${DELTA_FORMAT(delta)} Mt${pct}`;
+    val.textContent = `${sign}${DELTA_FORMAT(delta)} ${this.options.deltaUnit}${pct}`;
 
     row.append(swatch, name, val);
     this.tooltip.appendChild(row);

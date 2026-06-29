@@ -30,12 +30,14 @@ export const DEFAULT_METRIC: MetricDefinition = METRICS.co2_including_luc;
 /** Auxiliary columns retained for lens effects (read directly, never recomputed). */
 export const EXTRA_COLUMNS: readonly string[] = [
   'co2',
+  'co2_including_luc',
   'co2_per_capita',
   'co2_including_luc_per_capita',
   'gdp',
   'population',
   'co2_growth_abs',
   'co2_growth_prct',
+  // Absolute per-source breakdown (single-country driving factors, absolute mode)
   'coal_co2',
   'oil_co2',
   'gas_co2',
@@ -43,6 +45,14 @@ export const EXTRA_COLUMNS: readonly string[] = [
   'flaring_co2',
   'other_industry_co2',
   'land_use_change_co2',
+  // Per-capita per-source breakdown (driving factors, per-capita mode). No
+  // other_industry_co2_per_capita exists in OWID, so that source is absent there.
+  'coal_co2_per_capita',
+  'oil_co2_per_capita',
+  'gas_co2_per_capita',
+  'cement_co2_per_capita',
+  'flaring_co2_per_capita',
+  'land_use_change_co2_per_capita',
 ];
 
 /** CO₂ source breakdown used by the per-source slope chart. */
@@ -92,7 +102,7 @@ export const CO2_SOURCES = [
 ] as const;
 
 /**
- * AI trend research config (absolute-emissions "AI research" panel).
+ * AI trend research config ("AI research" panel, available in both metric modes).
  * The prompt lives here as a dynamic few-shot template: a fixed system prompt plus one
  * worked example, with the per-country factor list injected at call time (see researchPrompt.ts).
  * Haiku is mandated for all web research per the feature spec.

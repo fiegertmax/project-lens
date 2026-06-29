@@ -53,16 +53,13 @@ export class App {
     this.root.append(sidebar, main);
 
     new ConfigPanel(sidebar, dataset, state, bounds, lensState);
-    new LensPanel(sidebar, lensState, state, dataset);
+    new LensPanel(sidebar, lensState);
     const aiResearchPanel = new AiResearchPanel(sidebar, aiResearch, dataset);
     const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState, aiResearch);
 
+    // AI research is available in both metric modes; the panel stays visible throughout.
+    void aiResearchPanel;
     const syncView = (): void => {
-      // AI research only makes sense on the absolute "find reasons" view.
-      const isAbsolute = state.metricMode() === 'absolute';
-      aiResearchPanel.root.style.display = isAbsolute ? '' : 'none';
-      if (!isAbsolute) aiResearch.cancelSelection();
-
       charts.update();
     };
 

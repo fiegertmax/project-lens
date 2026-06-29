@@ -1,7 +1,5 @@
 import { LENS_WIDTH } from '../config';
-import type { EmissionsDataset } from '../data/EmissionsDataset';
 import { CHART_MARGIN } from '../charts/EmissionsChart';
-import type { AppState } from '../state/AppState';
 import type { CountryLensState } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
 import { LENS_ICON } from './icons';
@@ -20,14 +18,10 @@ export class LensPanel {
   readonly root: HTMLDivElement;
 
   private readonly state: CountryLensState;
-  private readonly appState: AppState;
-  private readonly dataset: EmissionsDataset;
   private removeButton!: HTMLButtonElement;
 
-  constructor(parent: HTMLElement, state: CountryLensState, appState: AppState, dataset: EmissionsDataset) {
+  constructor(parent: HTMLElement, state: CountryLensState) {
     this.state = state;
-    this.appState = appState;
-    this.dataset = dataset;
     const panel = new Collapsible(parent, 'Lens', 'lens-stage-panel');
     this.root = panel.root;
 
@@ -65,17 +59,9 @@ export class LensPanel {
 
   private wireDrag(btn: HTMLButtonElement): void {
     createLensDragSweeper<HTMLElement>(btn, {
-      resolveTarget: (x, y) => {
-        const el = lensDropTargetAt(x, y);
-        if (!el) return null;
-        if (this.appState.metricMode() === 'per-capita') {
-          const country = el.dataset.country;
-          // Single-country charts without GDP data are not valid drop targets in per-capita mode.
-          // The combined chart (no data-country) is always valid — it shows the scatter plot.
-          if (country && !this.dataset.hasGdpData(country)) return null;
-        }
-        return el;
-      },
+      // Any chart is a valid drop target: GDP-less single countries fall back to the
+      // driving-factors slope, so the lens is meaningful in every view and metric mode.
+      resolveTarget: (x, y) => lensDropTargetAt(x, y),
       onHover: (target, previous) => {
         previous?.classList.remove('emissions-chart--drop');
         target?.classList.add('emissions-chart--drop');

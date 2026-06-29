@@ -22,11 +22,13 @@ import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import type { LineDragCallbacks } from './drag-types';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
+import type { SlopeOptions } from './SlopeChart';
 import { GdpSlopeChart } from './GdpSlopeChart';
 import { LensScatterPlot } from './LensScatterPlot';
 import { CrosshairOverlay } from './CrosshairOverlay';
 import type { CrosshairEntry } from './CrosshairOverlay';
-import { crossCountrySum } from '../utils/crossCountryMean';
+import type { MetricMode } from '../state/AppState';
+import { ToggleSwitch } from '../ui/ToggleSwitch';
 
 export const CHART_MARGIN = { top: 12, right: 72, bottom: 28, left: 72 };
 const MARGIN = CHART_MARGIN;
@@ -36,6 +38,13 @@ const YEAR_FORMAT = format('d');
 const GDP_COLOR = '#2e86c1';
 const GDP_FORMAT = format('$.2~s');
 const GDP_TOOLTIP_FORMAT = format('$,.0f');
+
+/** Per-source slope chart units for the active metric (per-capita columns exist in the dataset). */
+function slopeOptions(metric: MetricMode): SlopeOptions {
+  return metric === 'per-capita'
+    ? { sourceSuffix: '_per_capita', unitLabel: 't CO₂/person', deltaUnit: 't' }
+    : { sourceSuffix: '', unitLabel: 'million tonnes', deltaUnit: 'Mt' };
+}
 
 type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
@@ -61,9 +70,11 @@ function computeYDomain(entries: SeriesEntry[]): [number, number] {
 
 /**
  * Unified emissions line chart that replaces CombinedChart + SingleCountryChart.
- * Shows N countries on one shared SVG. Behavior switches on isMulti() (countries.length > 1):
- *   - single: country label, individual emission-source slope, GDP slope for per-capita
- *   - multi:  legend, cross-country aggregated slope, scatter plot for per-capita
+ * Shows N countries on one shared SVG. Behavior switches on isMulti() (countries.length > 1).
+ * The lens slope panel behaves identically in both metric modes (absolute vs per-capita):
+ *   - single: GDP-vs-CO₂ comparison by default; toggle / "find reasons" reveals the per-source
+ *             driving factors, which is also the AI-research-selectable view.
+ *   - multi:  a CO₂-vs-GDP scatter (per-capita values or totals, matching the metric mode).
  */
 export class EmissionsChart {
   readonly chartId: string;
@@ -82,11 +93,15 @@ export class EmissionsChart {
   private readonly plot: SvgGroup;
   private readonly crosshair: CrosshairOverlay;
 
+  // Single-country slope toggle: GDP/CO₂ comparison ⇄ per-source driving factors.
+  private readonly slopeToggleHost: Selection<HTMLDivElement, unknown, null, undefined>;
+  private readonly slopeToggle: ToggleSwitch;
+  private showFactors = false;
+
   // Sub-charts — all appended to slopeCell, visibility controlled via display style
-  private readonly singleSlopeChart: SlopeChart;   // single + absolute
-  private readonly gdpSlopeChart: GdpSlopeChart;   // single + per-capita
-  private readonly multiSlopeChart: SlopeChart;    // multi + absolute
-  private readonly scatterPlot: LensScatterPlot;   // multi + per-capita
+  private readonly factorSlopeChart: SlopeChart;   // single — driving factors
+  private readonly gdpSlopeChart: GdpSlopeChart;   // single — GDP vs CO₂
+  private readonly scatterPlot: LensScatterPlot;   // multi — CO₂ vs GDP scatter
 
   private lensState: CountryLensState | null = null;
   private lensUnsub: (() => void) | null = null;
@@ -128,9 +143,17 @@ export class EmissionsChart {
     this.plot = this.svg.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
     this.crosshair = new CrosshairOverlay(this.svg, this.plot, '.emissions-line-hit');
 
-    this.singleSlopeChart = new SlopeChart(this.slopeCell.node()!, dataset);
+    // Compact toggle overlaid in the slope panel's top margin so it never offsets
+    // the slope SVG — keeping it aligned with the line chart. Single-country only.
+    this.slopeToggleHost = this.slopeCell
+      .append('div')
+      .attr('class', 'emissions-chart__slope-toggle')
+      .style('display', 'none');
+    this.slopeToggle = new ToggleSwitch(this.slopeToggleHost.node()!, true);
+    this.slopeToggle.onChange(() => this.setSlopeView(this.slopeToggle.checked()));
+
+    this.factorSlopeChart = new SlopeChart(this.slopeCell.node()!, dataset);
     this.gdpSlopeChart = new GdpSlopeChart(this.slopeCell.node()!, dataset);
-    this.multiSlopeChart = new SlopeChart(this.slopeCell.node()!, dataset);
     this.scatterPlot = new LensScatterPlot(this.slopeCell.node()!, dataset);
     // Hovering a scatter dot highlights its country across line, legend and dots.
     this.scatterPlot.onHoverCountry = (c) =>
@@ -149,9 +172,8 @@ export class EmissionsChart {
     this.aiUnsub?.();
     this.unsub();
     this.crosshair.destroy();
-    this.singleSlopeChart.destroy();
+    this.factorSlopeChart.destroy();
     this.gdpSlopeChart.destroy();
-    this.multiSlopeChart.destroy();
     this.scatterPlot.destroy();
     this.root.remove();
   }
@@ -182,21 +204,21 @@ export class EmissionsChart {
   }
 
   /**
-   * Marks the single-country absolute slope chart selectable while research selection
-   * is armed. Only single-country, absolute-mode charts with placed lenses qualify —
-   * exactly the charts that "represent one country".
+   * Marks the single-country driving-factors slope selectable while research selection
+   * is armed. Works in both metric modes — only the per-source view "represents one
+   * country" for research, so the GDP comparison view is never selectable.
    */
   private applyResearchSelectable(): void {
     const st = this.aiResearch;
     if (!st) return;
+    const single = !this.isMulti() && this.countries.length === 1;
+    const factorsShown = single && (this.showFactors || !this.dataset.hasGdpData(this.countries[0]));
     const eligible =
-      !this.isMulti() &&
-      this.countries.length === 1 &&
-      this.state.metricMode() === 'absolute' &&
+      factorsShown &&
       !!this.lensState &&
       this.lensState.get() !== null;
     const active = eligible && st.mode() === 'selecting';
-    this.singleSlopeChart.setSelectable(active, () => {
+    this.factorSlopeChart.setSelectable(active, () => {
       const lens = this.lensState!.get();
       st.select({
         country: this.countries[0],
@@ -302,67 +324,69 @@ export class EmissionsChart {
   }
 
   private renderSlopeForState(lenses: PlacedLens[]): void {
-    const perCapita = this.state.metricMode() === 'per-capita';
+    const metric = this.state.metricMode();
     const includeLUC = this.state.includeLandUseChange();
 
-    if (!this.isMulti()) {
-      // Single-country mode
-      this.multiSlopeChart.node().style.display = 'none';
-      this.multiSlopeChart.clear();
-      this.scatterPlot.node().style.display = 'none';
-      this.scatterPlot.clear();
+    if (this.isMulti()) {
+      // Multi-country: a CO₂-vs-GDP scatter in both metric modes (per-capita vs totals).
+      this.hide(this.factorSlopeChart);
+      this.hide(this.gdpSlopeChart);
+      this.scatterPlot.node().style.display = '';
+      this.scatterPlot.render(this.countries, lenses, includeLUC, this.resolveColor(), metric);
+      this.updateSlopeToggle();
+      return;
+    }
 
-      if (perCapita) {
-        this.singleSlopeChart.node().style.display = 'none';
-        this.singleSlopeChart.clear();
-        this.gdpSlopeChart.node().style.display = '';
-        this.gdpSlopeChart.onSwitchToAbsolute = () => this.state.setMetricMode('absolute');
-        this.gdpSlopeChart.render(this.countries[0], lenses, includeLUC);
-      } else {
-        this.gdpSlopeChart.node().style.display = 'none';
-        this.gdpSlopeChart.clear();
-        this.singleSlopeChart.node().style.display = '';
-        const excludeSources = includeLUC ? undefined : new Set(['land_use_change_co2']);
-        this.singleSlopeChart.render(
-          this.countries[0],
-          lenses,
-          undefined,
-          excludeSources,
-        );
-        this.applyResearchSelectable();
-      }
+    // Single-country: GDP/CO₂ comparison by default, driving factors on "find reasons"/toggle.
+    this.hide(this.scatterPlot);
+    const country = this.countries[0];
+    const showFactors = this.showFactors || !this.dataset.hasGdpData(country);
+
+    if (showFactors) {
+      this.hide(this.gdpSlopeChart);
+      this.factorSlopeChart.node().style.display = '';
+      const excludeSources = includeLUC ? undefined : new Set(['land_use_change_co2']);
+      this.factorSlopeChart.render(country, lenses, undefined, excludeSources, slopeOptions(metric));
     } else {
-      // Multi-country mode
-      this.singleSlopeChart.node().style.display = 'none';
-      this.singleSlopeChart.clear();
-      this.gdpSlopeChart.node().style.display = 'none';
-      this.gdpSlopeChart.clear();
+      this.hide(this.factorSlopeChart);
+      this.gdpSlopeChart.node().style.display = '';
+      this.gdpSlopeChart.onFindReasons = () => this.setSlopeView(true);
+      this.gdpSlopeChart.render(country, lenses, includeLUC, metric);
+    }
+    // Re-evaluate AI-research eligibility (only the driving-factors view qualifies).
+    this.applyResearchSelectable();
+    this.updateSlopeToggle();
+  }
 
-      if (perCapita) {
-        this.multiSlopeChart.node().style.display = 'none';
-        this.multiSlopeChart.clear();
-        this.scatterPlot.node().style.display = '';
-        this.scatterPlot.render(this.countries, lenses, includeLUC, this.resolveColor());
-      } else {
-        this.scatterPlot.node().style.display = 'none';
-        this.scatterPlot.clear();
-        this.multiSlopeChart.node().style.display = '';
-        this.renderSlopeMulti(lenses);
-      }
+  private setSlopeView(showFactors: boolean): void {
+    if (this.showFactors === showFactors) return;
+    this.showFactors = showFactors;
+    const lens = this.lensState?.get();
+    if (lens) this.renderSlopeForState([lens]);
+  }
+
+  /** Shows the toggle only for single-country lensed charts that have a GDP view to offer. */
+  private updateSlopeToggle(): void {
+    const country = this.countries[0];
+    const lensActive = !!this.lensState && this.lensState.get() !== null;
+    const visible =
+      !this.isMulti() && country !== undefined && lensActive && this.dataset.hasGdpData(country);
+    this.slopeToggleHost.style('display', visible ? '' : 'none');
+    if (visible) {
+      this.slopeToggle.set({ checked: this.showFactors, disabled: false, label: 'Driving factors' });
     }
   }
 
-  private renderSlopeMulti(lenses: PlacedLens[]): void {
-    const includeLUC = this.state.includeLandUseChange();
-    const aggregated = crossCountrySum(this.countries, lenses, this.dataset, includeLUC);
-    this.multiSlopeChart.renderAggregated(aggregated);
+  private hide(chart: { node(): HTMLElement; clear(): void }): void {
+    chart.node().style.display = 'none';
+    chart.clear();
   }
 
   private clearAllSubCharts(): void {
-    this.singleSlopeChart.clear();
+    this.factorSlopeChart.clear();
     this.gdpSlopeChart.clear();
-    this.multiSlopeChart.clear();
     this.scatterPlot.clear();
+    this.slopeToggleHost.style('display', 'none');
   }
 
   private renderAxes(

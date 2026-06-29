@@ -841,6 +841,7 @@ body.line-dragging {
 
 /* Slope panel hidden until a lens is active */
 .emissions-chart__slope {
+  position: relative;
   flex: 0 0 33.333%;
   min-width: 0;
   display: none;
@@ -851,17 +852,17 @@ body.line-dragging {
   display: block;
 }
 
-/* Weighted-mean toggle header — hidden in single mode, shown in multi mode */
-.emissions-chart__slope-header {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.emissions-chart--multi .emissions-chart__slope-header {
-  display: flex;
+/* Single-country slope toggle: GDP comparison ⇄ driving factors.
+   Overlaid in the panel's top margin so it never offsets the slope SVG. */
+.emissions-chart__slope-toggle {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  z-index: 2;
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* SVG fills the 1/3 slope panel container */

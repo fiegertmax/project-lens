@@ -1,6 +1,8 @@
 import { axisBottom, axisLeft, format, hcl, scaleLinear, select } from 'd3';
 import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
+import type { RawPoint } from '../data/types';
+import type { MetricMode } from '../state/AppState';
 import type { PlacedLens } from '../state/CountryLensState';
 import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import { showCursorTooltip, hideCursorTooltip } from '../ui/cursorTooltip';
@@ -14,8 +16,8 @@ const DOT_RADIUS = 4;
 const LUM_EARLY = 82;
 const LUM_LATE = 35;
 
-const GDP_FMT = format('.2s');
-const CO2_FMT = format('.2~f');
+const SI_FMT = format('.2s');
+const PERCAP_FMT = format('.2~f');
 
 type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
@@ -27,12 +29,46 @@ interface ScatterPoint {
   key: string;
   country: string;
   year: number;
-  co2PerCap: number;
-  gdpPerCap: number;
+  x: number;
+  y: number;
   color: string;
 }
 
-/** Scatterplot rendered in the combined chart's slope cell for per-capita mode. */
+/** Per-metric axis config: which value each dot's x/y reads and how it's labelled. */
+interface ScatterMetricConfig {
+  xValue: (pt: RawPoint) => number | undefined;
+  yValue: (pt: RawPoint) => number | undefined;
+  xLabel: string;
+  yLabel: string;
+  xFmt: (n: number) => string;
+  yFmt: (n: number) => string;
+}
+
+function metricConfig(metric: MetricMode, includeLUC: boolean): ScatterMetricConfig {
+  const finite = (v: number): number | undefined => (Number.isFinite(v) ? v : undefined);
+  if (metric === 'per-capita') {
+    const co2Col = includeLUC ? 'co2_including_luc_per_capita' : 'co2_per_capita';
+    return {
+      xValue: (pt) => finite(pt.extra[co2Col]),
+      yValue: (pt) => getGdpPerCapita(pt),
+      xLabel: 'CO₂ per capita (t)',
+      yLabel: 'GDP per capita ($)',
+      xFmt: PERCAP_FMT,
+      yFmt: SI_FMT,
+    };
+  }
+  const co2Col = includeLUC ? 'co2_including_luc' : 'co2';
+  return {
+    xValue: (pt) => finite(pt.extra[co2Col]),
+    yValue: (pt) => finite(pt.extra['gdp']),
+    xLabel: 'CO₂ emissions (Mt)',
+    yLabel: 'GDP (int-$)',
+    xFmt: SI_FMT,
+    yFmt: SI_FMT,
+  };
+}
+
+/** Scatterplot rendered in the combined chart's slope cell when a lens spans multiple countries. */
 export class LensScatterPlot {
   private readonly dataset: EmissionsDataset;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
@@ -67,6 +103,7 @@ export class LensScatterPlot {
     lenses: PlacedLens[],
     includeLUC: boolean,
     colorFor: (country: string) => string,
+    metric: MetricMode,
   ): void {
     if (countries.length === 0 || lenses.length === 0) {
       this.clear();
@@ -79,8 +116,8 @@ export class LensScatterPlot {
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
     this.svg.attr('width', width).attr('height', HEIGHT);
 
-    const co2Col = includeLUC ? 'co2_including_luc_per_capita' : 'co2_per_capita';
-    const points = this.collectPoints(lenses, countries, co2Col, colorFor);
+    const cfg = metricConfig(metric, includeLUC);
+    const points = this.collectPoints(lenses, countries, cfg, colorFor);
 
     if (points.length === 0) {
       this.renderEmpty(innerW, innerH);
@@ -89,20 +126,20 @@ export class LensScatterPlot {
 
     this.applyYearLuminance(points);
 
-    const xMax = Math.max(...points.map((p) => p.co2PerCap));
-    const yMax = Math.max(...points.map((p) => p.gdpPerCap));
+    const xMax = Math.max(...points.map((p) => p.x));
+    const yMax = Math.max(...points.map((p) => p.y));
     const x = scaleLinear().domain([0, xMax]).nice().range([0, innerW]);
     const y = scaleLinear().domain([0, yMax]).nice().range([innerH, 0]);
 
     this.group('empty').selectAll('*').remove();
-    this.renderAxes(x, y, innerH, innerW);
+    this.renderAxes(x, y, innerH, innerW, cfg);
     this.renderPoints(points, x, y);
   }
 
   private collectPoints(
     lenses: PlacedLens[],
     countries: string[],
-    co2Col: string,
+    cfg: ScatterMetricConfig,
     colorFor: (country: string) => string,
   ): ScatterPoint[] {
     const points: ScatterPoint[] = [];
@@ -111,16 +148,15 @@ export class LensScatterPlot {
         for (const country of countries) {
           const pt = this.dataset.series(country)?.points.find((p) => p.year === year);
           if (!pt) continue;
-          const co2PerCap = pt.extra[co2Col];
-          const gdpPerCap = getGdpPerCapita(pt);
-          if (!Number.isFinite(co2PerCap) || co2PerCap <= 0) continue;
-          if (gdpPerCap === undefined || gdpPerCap <= 0) continue;
+          const x = cfg.xValue(pt);
+          const y = cfg.yValue(pt);
+          if (x === undefined || x <= 0 || y === undefined || y <= 0) continue;
           points.push({
             key: `${country}-${year}`,
             country,
             year,
-            co2PerCap,
-            gdpPerCap,
+            x,
+            y,
             color: colorFor(country),
           });
         }
@@ -147,7 +183,13 @@ export class LensScatterPlot {
     }
   }
 
-  private renderAxes(x: LinearScale, y: LinearScale, innerH: number, innerW: number): void {
+  private renderAxes(
+    x: LinearScale,
+    y: LinearScale,
+    innerH: number,
+    innerW: number,
+    cfg: ScatterMetricConfig,
+  ): void {
     const g = this.group('axes');
 
     (g.selectAll<SVGGElement, null>('g.lens-scatter-plot__x-axis')
@@ -155,18 +197,18 @@ export class LensScatterPlot {
       .join('g')
       .attr('class', 'lens-scatter-plot__x-axis')
       .attr('transform', `translate(0,${innerH})`) as unknown as SvgGroup).call(
-      axisBottom(x).ticks(5).tickFormat((d) => CO2_FMT(Number(d))),
+      axisBottom(x).ticks(5).tickFormat((d) => cfg.xFmt(Number(d))),
     );
 
     (g.selectAll<SVGGElement, null>('g.lens-scatter-plot__y-axis')
       .data([null])
       .join('g')
       .attr('class', 'lens-scatter-plot__y-axis') as unknown as SvgGroup).call(
-      axisLeft(y).ticks(5).tickFormat((d) => GDP_FMT(Number(d))),
+      axisLeft(y).ticks(5).tickFormat((d) => cfg.yFmt(Number(d))),
     );
 
     g.selectAll<SVGTextElement, string>('text.lens-scatter-plot__x-label')
-      .data(['CO₂ per capita (t)'])
+      .data([cfg.xLabel])
       .join('text')
       .attr('class', 'lens-scatter-plot__x-label')
       .attr('x', innerW / 2)
@@ -175,7 +217,7 @@ export class LensScatterPlot {
       .text((d) => d);
 
     g.selectAll<SVGTextElement, string>('text.lens-scatter-plot__y-label')
-      .data(['GDP per capita ($)'])
+      .data([cfg.yLabel])
       .join('text')
       .attr('class', 'lens-scatter-plot__y-label')
       .attr('transform', `translate(${-MARGIN.left + 14},${innerH / 2}) rotate(-90)`)
@@ -200,8 +242,8 @@ export class LensScatterPlot {
       .data(points, (d) => d.key)
       .join('circle')
       .attr('class', 'lens-scatter-plot__point')
-      .attr('cx', (d) => x(d.co2PerCap))
-      .attr('cy', (d) => y(d.gdpPerCap))
+      .attr('cx', (d) => x(d.x))
+      .attr('cy', (d) => y(d.y))
       .attr('r', DOT_RADIUS)
       .attr('fill', (d) => d.color)
       .attr('opacity', 0.72)

@@ -1,6 +1,8 @@
 import { axisLeft, format, scaleLinear, select } from 'd3';
 import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
+import type { RawPoint } from '../data/types';
+import type { MetricMode } from '../state/AppState';
 import { LENS_COLOR } from '../config';
 import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import type { PlacedLens } from '../state/CountryLensState';
@@ -23,10 +25,45 @@ interface LensMetrics {
   gdpPct: number | undefined;
 }
 
-/** Slope chart showing percent change in CO₂/cap and GDP/cap over each lens window. */
+/** Resolves the CO₂ and GDP value of a year's data point for the active metric mode. */
+interface GdpMetricConfig {
+  co2: (pt: RawPoint) => number | undefined;
+  gdp: (pt: RawPoint) => number | undefined;
+  co2Label: string;
+  gdpLabel: string;
+}
+
+function metricConfig(metric: MetricMode, includeLUC: boolean): GdpMetricConfig {
+  const finite = (v: number | undefined): number | undefined =>
+    v !== undefined && Number.isFinite(v) ? v : undefined;
+  if (metric === 'per-capita') {
+    const co2Col = includeLUC ? 'co2_including_luc_per_capita' : 'co2_per_capita';
+    return {
+      co2: (pt) => finite(pt.extra[co2Col]),
+      gdp: (pt) => getGdpPerCapita(pt),
+      co2Label: 'CO₂/cap',
+      gdpLabel: 'GDP/cap',
+    };
+  }
+  const co2Col = includeLUC ? 'co2_including_luc' : 'co2';
+  return {
+    co2: (pt) => finite(pt.extra[co2Col]),
+    gdp: (pt) => finite(pt.extra['gdp']),
+    co2Label: 'CO₂',
+    gdpLabel: 'GDP',
+  };
+}
+
+/**
+ * Slope chart showing percent change in CO₂ and GDP over each lens window.
+ * Uses per-capita or total columns depending on the active metric mode; the
+ * percent-change framing keeps the decoupling story identical in both.
+ */
 export class GdpSlopeChart {
-  /** Set before render() to enable the "switch to absolute" interaction on colored areas. */
-  onSwitchToAbsolute?: () => void;
+  /** Set before render() to switch the panel to the per-source driving-factors view. */
+  onFindReasons?: () => void;
+  private co2Label = 'CO₂/cap';
+  private gdpLabel = 'GDP/cap';
 
   private readonly dataset: EmissionsDataset;
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
@@ -59,7 +96,7 @@ export class GdpSlopeChart {
     this.root.style('display', 'none');
   }
 
-  render(country: string, lenses: PlacedLens[], includeLUC = true): void {
+  render(country: string, lenses: PlacedLens[], includeLUC = true, metric: MetricMode = 'per-capita'): void {
     if (lenses.length === 0) {
       this.clear();
       return;
@@ -71,17 +108,19 @@ export class GdpSlopeChart {
     const innerH = HEIGHT - MARGIN.top - MARGIN.bottom;
     this.svg.attr('width', width).attr('height', HEIGHT);
 
+    const cfg = metricConfig(metric, includeLUC);
+    this.co2Label = cfg.co2Label;
+    this.gdpLabel = cfg.gdpLabel;
     const series = this.dataset.series(country);
     const columns = this.columnPositions(lenses, innerW);
 
     const metrics: LensMetrics[] = lenses.map((lens) => {
       const startPt = series?.points.find((p) => p.year === lens.startYear);
       const endPt = series?.points.find((p) => p.year === lens.endYear);
-      const co2Col = includeLUC ? 'co2_including_luc_per_capita' : 'co2_per_capita';
-      const co2Start = finiteOrUndef(startPt?.extra[co2Col]);
-      const co2End = finiteOrUndef(endPt?.extra[co2Col]);
-      const gdpStart = startPt ? getGdpPerCapita(startPt) : undefined;
-      const gdpEnd = endPt ? getGdpPerCapita(endPt) : undefined;
+      const co2Start = startPt ? cfg.co2(startPt) : undefined;
+      const co2End = endPt ? cfg.co2(endPt) : undefined;
+      const gdpStart = startPt ? cfg.gdp(startPt) : undefined;
+      const gdpEnd = endPt ? cfg.gdp(endPt) : undefined;
       return {
         lens,
         startX: columns.get(lens.startYear)!,
@@ -196,7 +235,7 @@ export class GdpSlopeChart {
             })
             .on('click', () => {
               this.tooltip.style('display', 'none');
-              this.onSwitchToAbsolute?.();
+              this.onFindReasons?.();
             });
         }
       }
@@ -253,7 +292,7 @@ export class GdpSlopeChart {
         if (isLast) {
           g.append('text').attr('class', 'gdp-slope-chart__label')
             .attr('x', m.endX + 4).attr('y', endY)
-            .attr('dy', '0.35em').attr('fill', CO2_COLOR).text('CO₂/cap');
+            .attr('dy', '0.35em').attr('fill', CO2_COLOR).text(this.co2Label);
         }
       }
 
@@ -266,7 +305,7 @@ export class GdpSlopeChart {
         if (isLast) {
           g.append('text').attr('class', 'gdp-slope-chart__label')
             .attr('x', m.endX + 4).attr('y', endY)
-            .attr('dy', '0.35em').attr('fill', GDP_COLOR).text('GDP/cap');
+            .attr('dy', '0.35em').attr('fill', GDP_COLOR).text(this.gdpLabel);
         }
       }
     }
@@ -309,10 +348,6 @@ function decouplingColor(gdpPct: number, co2Pct: number): string | undefined {
 function pctChange(start: number | undefined, end: number | undefined): number | undefined {
   if (start === undefined || end === undefined || start === 0) return undefined;
   return ((end - start) / Math.abs(start)) * 100;
-}
-
-function finiteOrUndef(v: number | undefined): number | undefined {
-  return v !== undefined && Number.isFinite(v) ? v : undefined;
 }
 
 function fmtPct(v: number): string {
