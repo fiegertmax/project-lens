@@ -34,6 +34,9 @@ export class LensScatterPlot {
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
   private readonly plot: SvgGroup;
 
+  /** Fired when a dot is hovered (country) or the hover ends (null). */
+  onHoverCountry?: (country: string | null) => void;
+
   constructor(parent: HTMLElement, dataset: EmissionsDataset) {
     this.dataset = dataset;
     this.root = select(parent).append('div').attr('class', 'lens-scatter-plot');
@@ -155,7 +158,18 @@ export class LensScatterPlot {
       .text((d) => d);
   }
 
+  /** Dims dots not belonging to `country`; pass null to reset all dots. */
+  highlightCountry(country: string | null): void {
+    this.group('points')
+      .selectAll<SVGCircleElement, ScatterPoint>('circle.lens-scatter-plot__point')
+      .transition().duration(100)
+      .attr('opacity', (d) =>
+        country === null ? 0.72 : d.country === country ? 0.95 : 0.1,
+      );
+  }
+
   private renderPoints(points: ScatterPoint[], x: LinearScale, y: LinearScale): void {
+    const self = this;
     this.group('points')
       .selectAll<SVGCircleElement, ScatterPoint>('circle.lens-scatter-plot__point')
       .data(points, (d) => d.key)
@@ -168,10 +182,17 @@ export class LensScatterPlot {
       .attr('opacity', 0.72)
       .attr('stroke', 'var(--bg)')
       .attr('stroke-width', 0.5)
-      .on('pointerenter pointermove', function (ev: PointerEvent) {
+      .on('pointerenter', function (ev: PointerEvent, d) {
+        showCursorTooltip(DRAG_HINT, ev.clientX, ev.clientY);
+        self.onHoverCountry?.(d.country);
+      })
+      .on('pointermove', function (ev: PointerEvent) {
         showCursorTooltip(DRAG_HINT, ev.clientX, ev.clientY);
       })
-      .on('pointerleave', () => hideCursorTooltip());
+      .on('pointerleave', () => {
+        hideCursorTooltip();
+        self.onHoverCountry?.(null);
+      });
   }
 
   private renderEmpty(innerW: number, innerH: number): void {

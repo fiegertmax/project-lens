@@ -1,11 +1,11 @@
 # Feedback from user test in course from 26.05.2026
 
 ## Other Students
-- in the config panel, it would be more intuitive it they were as well expandable by a double click instead of only the plus
-- there is a bug: when removing countries such that there are < 3 countries left, both countries remain in the legend of the line chart even though they correspond to no line; When removing Germany as the last country, its line remains (might have to do with Germany being the default country?); When removing Germany such that only one other country is left, Germany's line disappears, Germany remains in the legend with its default color, but the remaining country's line switches to Germany's color despite the legend determining another color for that country; When removing countries such that only one country remains, the legend remains in the graph even though 'single country charts' by default need no legend at all.
-- it would be more intuitive if it were possible to adjust the lens size at the edges with the cursor becoming a <--> symbol
-- the user does not immediately understand that when pressing 'find reasons', the view is switched to total emissions. Making in more obvious or offering an option to undo this would be good. (LATER; MIGHT be resolved by resolving prof's feedback)
-- luc label is cut off in the slope graph (LOW PRIO; does this really matter? Hovering already shows name + description)
+- (DONE) in the config panel, it would be more intuitive it they were as well expandable by a double click instead of only the plus
+- (DONE) there is a bug: when removing countries such that there are < 3 countries left, both countries remain in the legend of the line chart even though they correspond to no line; When removing Germany as the last country, its line remains (might have to do with Germany being the default country?); When removing Germany such that only one other country is left, Germany's line disappears, Germany remains in the legend with its default color, but the remaining country's line switches to Germany's color despite the legend determining another color for that country; When removing countries such that only one country remains, the legend remains in the graph even though 'single country charts' by default need no legend at all.
+- (DONE) it would be more intuitive if it were possible to adjust the lens size at the edges with the cursor becoming a <--> symbol
+- (LATER; MIGHT be resolved by resolving prof's feedback) the user does not immediately understand that when pressing 'find reasons', the view is switched to total emissions. Making in more obvious or offering an option to undo this would be good.
+- (LOW PRIO; does this really matter? Hovering already shows name + description) luc label is cut off in the slope graph
 
 ## Professor
 

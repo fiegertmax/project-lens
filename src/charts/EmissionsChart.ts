@@ -128,6 +128,9 @@ export class EmissionsChart {
     this.gdpSlopeChart = new GdpSlopeChart(this.slopeCell.node()!, dataset);
     this.multiSlopeChart = new SlopeChart(this.slopeCell.node()!, dataset);
     this.scatterPlot = new LensScatterPlot(this.slopeCell.node()!, dataset);
+    // Hovering a scatter dot highlights its country across line, legend and dots.
+    this.scatterPlot.onHoverCountry = (c) =>
+      c ? this.highlight(c) : this.clearHighlight();
 
     this.unsub = state.subscribe(() => this.update());
     this.syncModeAttrs();
@@ -414,9 +417,7 @@ export class EmissionsChart {
       .attr('stroke', (d) => color(d.country))
       .attr('stroke-width', 1.5)
       .attr('pointer-events', 'stroke')
-      .attr('d', (d) => generator(d.points) ?? '')
-      .on('mouseover', (_event, d) => { if (this.isMulti()) this.highlight(d.country); })
-      .on('mouseout', () => { if (this.isMulti()) this.clearHighlight(); });
+      .attr('d', (d) => generator(d.points) ?? '');
 
     this.renderDragOverlays(entries, generator);
     this.renderEmptyNotice(entries, innerW, innerH);
@@ -440,6 +441,8 @@ export class EmissionsChart {
             .attr('stroke-width', 12)
             .attr('pointer-events', 'stroke')
             .attr('cursor', 'grab')
+            .on('mouseover', (_ev, d) => { if (self.isMulti()) self.highlight(d.country); })
+            .on('mouseout', () => { if (self.isMulti()) self.clearHighlight(); })
             .call(
               drag<SVGPathElement, SeriesEntry>()
                 .on('start', function (ev: D3DragEvent<SVGPathElement, SeriesEntry, unknown>, d) {
@@ -571,6 +574,7 @@ export class EmissionsChart {
       .selectAll<SVGGElement, string>('g.legend-row')
       .transition().duration(100)
       .attr('opacity', (d) => (d === country ? 1 : 0.15));
+    this.scatterPlot.highlightCountry(country);
   }
 
   private clearHighlight(): void {
@@ -580,6 +584,7 @@ export class EmissionsChart {
     this.group('legend')
       .selectAll<SVGGElement, string>('g.legend-row')
       .transition().duration(100).attr('opacity', 1);
+    this.scatterPlot.highlightCountry(null);
   }
 
   private group(name: string): PlotLayer {
