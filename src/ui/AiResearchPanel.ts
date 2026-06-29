@@ -8,9 +8,11 @@ import { Collapsible } from './Collapsible';
 import { InfoTip } from './InfoTip';
 
 /**
- * Sidebar panel for AI trend research (visible only in absolute-emissions mode).
- * Holds the API-key field and the "Research trend" flow, and renders the model's
- * streamed bullet-point output. Owns the research runner registered on the state.
+ * Sidebar panel for AI trend research (available in both metric modes). Holds the
+ * API-key field and the "Research trend" flow, and renders the model's streamed
+ * bullet-point output. The prompt always uses absolute per-source changes, so the
+ * researched causes are identical regardless of the active view. Owns the research
+ * runner registered on the state.
  */
 export class AiResearchPanel {
   readonly root: HTMLDivElement;

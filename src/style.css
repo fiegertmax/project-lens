@@ -12,14 +12,6 @@
   --lens-fill: rgba(13, 148, 136, 0.16);
   --lens-border: rgba(13, 148, 136, 0.55);
 
-  /* Stage colors — single source of truth mirroring config STAGE_COLORS (LENS-02) */
-  --stage-1-color: #2e9e5b;
-  --stage-2-color: #e08a2e;
-  --stage-3-color: #3b73c8;
-  --stage-1-fill: rgba(46, 158, 91, 0.16);
-  --stage-2-fill: rgba(224, 138, 46, 0.16);
-  --stage-3-fill: rgba(59, 115, 200, 0.16);
-
   font: 15px/1.45 system-ui, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -94,6 +86,8 @@ body {
   gap: 8px;
   padding: 8px 10px;
   background: var(--panel-bg);
+  cursor: pointer;
+  user-select: none;
 }
 
 .collapsible__title {
@@ -592,6 +586,11 @@ body.lens-dragging {
   user-select: none;
 }
 
+body.lens-band-edge-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 .emissions-chart--drop {
   outline: 2px dashed var(--lens-border);
   outline-offset: 3px;
@@ -778,10 +777,42 @@ body.line-dragging {
 
 /* Country name label — visible in single-country mode, hidden in multi mode */
 .emissions-chart__label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text);
+}
+
+/* Horizontal CO₂ / GDP key placed next to the country headline */
+.emissions-chart__legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.emissions-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emissions-chart__legend-swatch {
+  width: 18px;
+  border-top: 2px solid currentColor;
+}
+
+.emissions-chart__legend-swatch--dashed {
+  border-top-style: dashed;
+}
+
+.emissions-chart__legend-label {
+  color: var(--text-muted);
 }
 
 .emissions-chart--multi .emissions-chart__label {
@@ -810,6 +841,7 @@ body.line-dragging {
 
 /* Slope panel hidden until a lens is active */
 .emissions-chart__slope {
+  position: relative;
   flex: 0 0 33.333%;
   min-width: 0;
   display: none;
@@ -820,17 +852,17 @@ body.line-dragging {
   display: block;
 }
 
-/* Weighted-mean toggle header — hidden in single mode, shown in multi mode */
-.emissions-chart__slope-header {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.emissions-chart--multi .emissions-chart__slope-header {
-  display: flex;
+/* Single-country slope toggle: GDP comparison ⇄ driving factors.
+   Overlaid in the panel's top margin so it never offsets the slope SVG. */
+.emissions-chart__slope-toggle {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  z-index: 2;
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* SVG fills the 1/3 slope panel container */
@@ -977,7 +1009,7 @@ body.line-dragging {
   cursor: default;
 }
 
-/* Phase 4: staged lens icons + placed lens bands */
+/* Sidebar lens icon + placed lens band */
 
 .lens-stage-panel__list {
   display: flex;
@@ -985,7 +1017,7 @@ body.line-dragging {
   gap: 8px;
 }
 
-/* Each stage occupies one row: [icon] [remove button] */
+/* The single row: [icon] [remove button] */
 .lens-stage-panel__row {
   display: flex;
   align-items: center;
@@ -999,6 +1031,7 @@ body.line-dragging {
   border-radius: 6px;
   border: 1px solid currentColor;
   background: var(--bg);
+  color: var(--lens);
   cursor: pointer;
 }
 
@@ -1006,15 +1039,11 @@ body.line-dragging {
   opacity: 0.75;
 }
 
-.lens-stage-panel__remove--stage-1 { color: var(--stage-1-color); }
-.lens-stage-panel__remove--stage-2 { color: var(--stage-2-color); }
-.lens-stage-panel__remove--stage-3 { color: var(--stage-3-color); }
-
 .lens-stage-panel__remove--hidden {
   display: none;
 }
 
-/* Sidebar drag handle for a staged lens — mirrors .lens-panel__lens-icon sizing */
+/* Sidebar drag handle for the lens — mirrors .lens-panel__lens-icon sizing */
 .lens-stage-icon {
   display: grid;
   place-items: center;
@@ -1024,6 +1053,7 @@ body.line-dragging {
   border: 1px solid currentColor;
   border-radius: 10px;
   background: var(--bg);
+  color: var(--lens);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -1037,27 +1067,7 @@ body.line-dragging {
   cursor: grabbing;
 }
 
-.lens-stage-icon--stage-1 {
-  color: var(--stage-1-color);
-  border-color: var(--stage-1-color);
-}
-
-.lens-stage-icon--stage-2 {
-  color: var(--stage-2-color);
-  border-color: var(--stage-2-color);
-}
-
-.lens-stage-icon--stage-3 {
-  color: var(--stage-3-color);
-  border-color: var(--stage-3-color);
-}
-
-/* Hidden stages disappear entirely — never greyed/disabled (Success Criterion 2) */
-.lens-stage-icon--hidden {
-  display: none;
-}
-
-/* Draggable band on the line chart — fill/stroke set inline by JS per stage */
+/* Draggable band on the line chart — fill/stroke set inline by JS */
 .placed-lens__rect {
   cursor: grab;
   stroke-width: 1;

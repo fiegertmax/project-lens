@@ -1,6 +1,5 @@
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { AppState, YearRange } from '../state/AppState';
-import type { CountryLensState } from '../state/CountryLensState';
 import { Collapsible } from './Collapsible';
 import { CountrySelector } from './CountrySelector';
 import { InfoTip } from './InfoTip';
@@ -16,7 +15,6 @@ export class ConfigPanel {
     dataset: EmissionsDataset,
     state: AppState,
     yearBounds: YearRange,
-    lensState: CountryLensState,
   ) {
     const panel = new Collapsible(parent, 'Base Visualization', 'config-panel');
     const body = panel.body;
@@ -27,7 +25,7 @@ export class ConfigPanel {
     this.buildWorldMapButton(countries, dataset, state);
     new CountrySelector(countries.body, dataset.countries(), state);
     this.buildLucToggle(body, state);
-    this.buildPerCapitaToggle(body, state, lensState);
+    this.buildPerCapitaToggle(body, state);
   }
 
   /** Globe button in the Countries header that opens the quick-select map. */
@@ -85,7 +83,7 @@ export class ConfigPanel {
     parent.appendChild(row);
   }
 
-  private buildPerCapitaToggle(parent: HTMLElement, state: AppState, lensState: CountryLensState): void {
+  private buildPerCapitaToggle(parent: HTMLElement, state: AppState): void {
     const row = document.createElement('div');
     row.className = 'config-toggle-row';
 
@@ -100,7 +98,6 @@ export class ConfigPanel {
     toggle.onChange(() => {
       const perCapita = toggle.checked();
       toggle.set({ checked: perCapita, disabled: false, label: perCapita ? 'Per capita' : 'Absolute' });
-      lensState.clearAll();
       state.setMetricMode(perCapita ? 'per-capita' : 'absolute');
     });
 
