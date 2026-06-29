@@ -20,8 +20,8 @@
 - (DONE) parallel coordinated views: If the lenses are coordinated, the should be FULLY coordinated --> removing the lens with x removes them all; clicking 'find reasons' should keep the other lenses as well, ...
 
 ### Slope Chart
-- does the slope chart really make sense here? check whether we can show this differently
-- if we keep the slope chart: find an alternative for the logarithmic scale: while it ensures each of the driving factors can be looked at in detail, the scale gives a wrong idea on which factor is the actual most important one
+- (DONE) does the slope chart really make sense here? check whether we can show this differently
+- (DONE) if we keep the slope chart: find an alternative for the logarithmic scale: while it ensures each of the driving factors can be looked at in detail, the scale gives a wrong idea on which factor is the actual most important one
 
 ### General
-- why do we need to switch from per-capita to absolute in order to show the reasons for emissions? The factors can be shown with respect to population as well --> this would remove the earlier confusion of users caused by 'find reasons' switching the view from per-capita to absolute
+- (DONE) why do we need to switch from per-capita to absolute in order to show the reasons for emissions? The factors can be shown with respect to population as well --> this would remove the earlier confusion of users caused by 'find reasons' switching the view from per-capita to absolute

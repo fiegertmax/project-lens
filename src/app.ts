@@ -52,7 +52,7 @@ export class App {
     main.className = 'app__main';
     this.root.append(sidebar, main);
 
-    new ConfigPanel(sidebar, dataset, state, bounds, lensState);
+    new ConfigPanel(sidebar, dataset, state, bounds);
     new LensPanel(sidebar, lensState);
     const aiResearchPanel = new AiResearchPanel(sidebar, aiResearch, dataset);
     const charts = new ChartArea(main, dataset, state, DEFAULT_METRIC, lensState, aiResearch);
