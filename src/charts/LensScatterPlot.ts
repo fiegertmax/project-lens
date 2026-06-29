@@ -1,4 +1,4 @@
-import { axisBottom, axisLeft, format, scaleLinear, select } from 'd3';
+import { axisBottom, axisLeft, format, hcl, scaleLinear, select } from 'd3';
 import type { ScaleLinear, Selection } from 'd3';
 import type { EmissionsDataset } from '../data/EmissionsDataset';
 import type { PlacedLens } from '../state/CountryLensState';
@@ -8,6 +8,11 @@ import { showCursorTooltip, hideCursorTooltip } from '../ui/cursorTooltip';
 const MARGIN = { top: 20, right: 20, bottom: 48, left: 68 };
 const HEIGHT = 360;
 const DOT_RADIUS = 4;
+// HCL luminance band for year encoding: later year → darker, so the most
+// recent dots have the highest contrast against the white background. Bounded
+// so early dots stay visible and late dots stay richly colored, not near-black.
+const LUM_EARLY = 82;
+const LUM_LATE = 35;
 
 const GDP_FMT = format('.2s');
 const CO2_FMT = format('.2~f');
@@ -82,6 +87,8 @@ export class LensScatterPlot {
       return;
     }
 
+    this.applyYearLuminance(points);
+
     const xMax = Math.max(...points.map((p) => p.co2PerCap));
     const yMax = Math.max(...points.map((p) => p.gdpPerCap));
     const x = scaleLinear().domain([0, xMax]).nice().range([0, innerW]);
@@ -120,6 +127,24 @@ export class LensScatterPlot {
       }
     }
     return points;
+  }
+
+  /**
+   * Encodes the year into each dot's color via HCL luminance: hue/chroma stay
+   * from the country, later years get higher luminance so trends read as a
+   * dark→light progression per country.
+   */
+  private applyYearLuminance(points: ScatterPoint[]): void {
+    const years = points.map((p) => p.year);
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+    const span = maxYear - minYear;
+    for (const p of points) {
+      const t = span === 0 ? 1 : (p.year - minYear) / span;
+      const c = hcl(p.color);
+      c.l = LUM_EARLY + t * (LUM_LATE - LUM_EARLY);
+      p.color = c.toString();
+    }
   }
 
   private renderAxes(x: LinearScale, y: LinearScale, innerH: number, innerW: number): void {

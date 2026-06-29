@@ -13,7 +13,7 @@
 - the scatterplot should switch to the hcl (hue, chroma, luminence) color space
 - hue can keep determining the country
 - luminence can determine the time / year
-- when highlighting a country by hovering, the dots in the scatterplot should as well be highighted
+- (DONE) when highlighting a country by hovering, the dots in the scatterplot and the country in the legend must be highlighted
 
 ### Lens
 - having different colors for the lenses makes little sense here
