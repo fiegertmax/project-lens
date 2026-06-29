@@ -74,6 +74,8 @@ export class EmissionsChart {
 
   private readonly root: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly labelEl: Selection<HTMLDivElement, unknown, null, undefined>;
+  private readonly labelNameEl: Selection<HTMLSpanElement, unknown, null, undefined>;
+  private readonly legendEl: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly lineCell: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly slopeCell: Selection<HTMLDivElement, unknown, null, undefined>;
   private readonly svg: Selection<SVGSVGElement, unknown, null, undefined>;
@@ -115,6 +117,8 @@ export class EmissionsChart {
       .attr('data-chart-id', chartId);
 
     this.labelEl = this.root.append('div').attr('class', 'emissions-chart__label');
+    this.labelNameEl = this.labelEl.append('span').attr('class', 'emissions-chart__label-name');
+    this.legendEl = this.labelEl.append('div').attr('class', 'emissions-chart__legend');
 
     const body = this.root.append('div').attr('class', 'emissions-chart__body');
     this.lineCell = body.append('div').attr('class', 'emissions-chart__line');
@@ -255,7 +259,7 @@ export class EmissionsChart {
 
     // Update label in single mode
     if (!this.isMulti()) {
-      this.labelEl.text(this.countries[0] ?? '');
+      this.labelNameEl.text(this.countries[0] ?? '');
     }
 
     // Re-render slope if the lens is active (preserves state after update() calls)
@@ -271,7 +275,7 @@ export class EmissionsChart {
     // data-country is used by LensPanel for the per-capita GDP availability check
     this.root.attr('data-country', !multi ? (this.countries[0] ?? null) : null);
     if (!multi && this.countries[0]) {
-      this.labelEl.text(this.countries[0]);
+      this.labelNameEl.text(this.countries[0]);
     }
   }
 
@@ -582,10 +586,13 @@ export class EmissionsChart {
     this.group('y-axis-right').selectAll('*').remove();
     this.group('y-title-right').selectAll('*').remove();
     this.group('gdp-line').selectAll('*').remove();
-    this.group('legend').selectAll('*').remove();
+    this.legendEl.selectAll('*').remove();
   }
 
-  /** Compact two-row key identifying the CO₂ (country color) and GDP lines. */
+  /**
+   * Compact horizontal key beside the country headline (not inside the plot, so
+   * it never overlaps the lines) identifying the CO₂ and GDP lines.
+   */
   private renderSingleLegend(
     country: string,
     color: (c: string) => string,
@@ -595,33 +602,26 @@ export class EmissionsChart {
       { color: color(country), label: co2Label, dash: false },
       { color: GDP_COLOR, label: 'GDP per capita', dash: true },
     ];
-    this.group('legend')
-      .attr('transform', 'translate(8,0)')
-      .selectAll<SVGGElement, (typeof rows)[number]>('g.legend-row')
+    const items = this.legendEl
+      .selectAll<HTMLDivElement, (typeof rows)[number]>('div.emissions-chart__legend-item')
       .data(rows, (d) => d.label)
-      .join('g')
-      .attr('class', 'legend-row')
-      .attr('transform', (_d, i) => `translate(0,${i * 18})`)
-      .call((row) => {
-        row
-          .selectAll<SVGLineElement, (typeof rows)[number]>('line.legend-swatch')
-          .data((d) => [d])
-          .join('line')
-          .attr('class', 'legend-swatch')
-          .attr('x1', 0).attr('y1', 5).attr('x2', 16).attr('y2', 5)
-          .attr('stroke', (d) => d.color)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', (d) => (d.dash ? '5 3' : null));
-        row
-          .selectAll<SVGTextElement, (typeof rows)[number]>('text.legend-label')
-          .data((d) => [d])
-          .join('text')
-          .attr('class', 'legend-label')
-          .attr('x', 22).attr('y', 9)
-          .attr('font-size', '12px')
-          .attr('fill', 'var(--text)')
-          .text((d) => d.label);
-      });
+      .join('div')
+      .attr('class', 'emissions-chart__legend-item');
+
+    items
+      .selectAll<HTMLSpanElement, (typeof rows)[number]>('span.emissions-chart__legend-swatch')
+      .data((d) => [d])
+      .join('span')
+      .attr('class', 'emissions-chart__legend-swatch')
+      .classed('emissions-chart__legend-swatch--dashed', (d) => d.dash)
+      .style('border-color', (d) => d.color);
+
+    items
+      .selectAll<HTMLSpanElement, (typeof rows)[number]>('span.emissions-chart__legend-label')
+      .data((d) => [d])
+      .join('span')
+      .attr('class', 'emissions-chart__legend-label')
+      .text((d) => d.label);
   }
 
   /** Removes all drawn series + legend when no country is selected. */
@@ -630,6 +630,7 @@ export class EmissionsChart {
     this.group('drag-overlays').selectAll('path.emissions-line-hit').remove();
     this.group('empty').selectAll('text').remove();
     this.clearLegend();
+    this.clearGdpOverlay();
   }
 
   private renderEmptyNotice(entries: SeriesEntry[], innerW: number, innerH: number): void {

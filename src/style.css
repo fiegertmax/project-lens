@@ -777,10 +777,42 @@ body.line-dragging {
 
 /* Country name label — visible in single-country mode, hidden in multi mode */
 .emissions-chart__label {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.2;
   color: var(--text);
+}
+
+/* Horizontal CO₂ / GDP key placed next to the country headline */
+.emissions-chart__legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.emissions-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emissions-chart__legend-swatch {
+  width: 18px;
+  border-top: 2px solid currentColor;
+}
+
+.emissions-chart__legend-swatch--dashed {
+  border-top-style: dashed;
+}
+
+.emissions-chart__legend-label {
+  color: var(--text-muted);
 }
 
 .emissions-chart--multi .emissions-chart__label {
