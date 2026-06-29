@@ -12,16 +12,28 @@ import type { CountrySeries, DataPoint, RawPoint } from '../data/types';
  */
 export function resolveSeries(
   series: CountrySeries,
-  [minYear, maxYear]: [number, number],
+  range: [number, number],
   extraColumn?: string,
 ): DataPoint[] {
   const getValue = (p: RawPoint): number =>
     extraColumn !== undefined ? p.extra[extraColumn] : p.value;
+  return resolveSeriesBy(series, range, getValue);
+}
 
+/**
+ * Like resolveSeries but reads each point's value through a custom extractor —
+ * for derived metrics (e.g. GDP per capita = gdp / population) that aren't a
+ * single column. Non-finite extractor results mark a year as missing data.
+ */
+export function resolveSeriesBy(
+  series: CountrySeries,
+  [minYear, maxYear]: [number, number],
+  getValue: (p: RawPoint) => number | undefined,
+): DataPoint[] {
   const real = series.points.filter((p) => Number.isFinite(getValue(p)));
   if (real.length === 0) return [];
 
-  const valueByYear = new Map(real.map((p) => [p.year, getValue(p)]));
+  const valueByYear = new Map(real.map((p) => [p.year, getValue(p) as number]));
   const firstYear = real[0].year;
   const lastYear = real[real.length - 1].year;
 

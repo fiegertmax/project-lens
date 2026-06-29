@@ -4,10 +4,22 @@ import type { DataPoint } from '../data/types';
 
 const VALUE_FMT = format(',.2f');
 
+interface DotDatum {
+  label: string;
+  color: string;
+  v: number;
+  yScale: ScaleLinear<number, number>;
+  format: (v: number) => string;
+}
+
 export interface CrosshairEntry {
   label: string;
   color: string;
   points: DataPoint[];
+  /** Per-entry y scale for dot placement; falls back to the shared y (e.g. a GDP right axis). */
+  yScale?: ScaleLinear<number, number>;
+  /** Per-entry value formatter; falls back to the shared valueLabel. */
+  format?: (v: number) => string;
 }
 
 /** Linear interpolation of a value at `year` from a sorted DataPoint array. */
@@ -131,16 +143,22 @@ export class CrosshairOverlay {
       .attr('x2', px).attr('y2', this.innerH);
 
     const dotData = this.entries
-      .map((e) => ({ label: e.label, color: e.color, v: valueAt(e.points, year) }))
-      .filter((e): e is { label: string; color: string; v: number } => e.v !== undefined);
+      .map((e) => ({
+        label: e.label,
+        color: e.color,
+        v: valueAt(e.points, year),
+        yScale: e.yScale ?? y,
+        format: e.format ?? this.valueLabel,
+      }))
+      .filter((e): e is DotDatum => e.v !== undefined);
 
     this.group
-      .selectAll<SVGCircleElement, (typeof dotData)[number]>('circle.crosshair__dot')
+      .selectAll<SVGCircleElement, DotDatum>('circle.crosshair__dot')
       .data(dotData, (d) => d.label)
       .join('circle')
       .attr('class', 'crosshair__dot')
       .attr('cx', px)
-      .attr('cy', (d) => y(d.v))
+      .attr('cy', (d) => d.yScale(d.v))
       .attr('r', 4)
       .attr('fill', (d) => d.color)
       .attr('stroke', 'var(--bg)')
@@ -152,7 +170,7 @@ export class CrosshairOverlay {
 
   private buildTooltip(
     year: number,
-    entries: Array<{ label: string; color: string; v: number }>,
+    entries: DotDatum[],
     clientX: number,
     clientY: number,
   ): void {
@@ -177,7 +195,7 @@ export class CrosshairOverlay {
 
       const val = document.createElement('span');
       val.className = 'crosshair-tooltip__value';
-      val.textContent = this.valueLabel(e.v);
+      val.textContent = e.format(e.v);
 
       row.append(swatch, name, val);
       this.tooltip.appendChild(row);

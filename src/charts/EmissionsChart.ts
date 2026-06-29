@@ -1,6 +1,7 @@
 import {
   axisBottom,
   axisLeft,
+  axisRight,
   drag,
   format,
   line,
@@ -15,20 +16,26 @@ import type { DataPoint } from '../data/types';
 import type { AppState } from '../state/AppState';
 import type { CountryLensState, PlacedLens } from '../state/CountryLensState';
 import type { AiResearchState } from '../state/AiResearchState';
-import { resolveSeries } from '../utils/interpolation';
+import { resolveSeries, resolveSeriesBy } from '../utils/interpolation';
 import { metricSpec, extraColumnFor } from '../utils/metricSpec';
+import { getGdpPerCapita } from '../utils/getGdpPerCapita';
 import type { LineDragCallbacks } from './drag-types';
 import { renderLensBands as renderLensBandsHelper } from './LensBandRenderer';
 import { SlopeChart } from './SlopeChart';
 import { GdpSlopeChart } from './GdpSlopeChart';
 import { LensScatterPlot } from './LensScatterPlot';
 import { CrosshairOverlay } from './CrosshairOverlay';
+import type { CrosshairEntry } from './CrosshairOverlay';
 import { crossCountrySum } from '../utils/crossCountryMean';
 
-export const CHART_MARGIN = { top: 12, right: 64, bottom: 28, left: 72 };
+export const CHART_MARGIN = { top: 12, right: 72, bottom: 28, left: 72 };
 const MARGIN = CHART_MARGIN;
 const HEIGHT = 360;
 const YEAR_FORMAT = format('d');
+// Secondary GDP/capita line — kept in sync with GdpSlopeChart's GDP color.
+const GDP_COLOR = '#2e86c1';
+const GDP_FORMAT = format('$.2~s');
+const GDP_TOOLTIP_FORMAT = format('$,.0f');
 
 type LinearScale = ScaleLinear<number, number>;
 type SvgGroup = Selection<SVGGElement, unknown, null, undefined>;
@@ -227,20 +234,24 @@ export class EmissionsChart {
 
     this.renderAxes(x, y, innerH, spec);
     this.renderLines(entries, x, y, color, innerW, innerH);
-    // A single-country chart never shows a legend; multi mode keeps it in sync
-    // with the countries actually drawn (and their current colors).
+    // In single mode a second GDP/capita line answers "did emissions track
+    // wealth?" directly on the base chart — no lens required. It also owns the
+    // single-country legend (CO₂ vs GDP).
+    const gdpEntry = this.renderGdpOverlay(x, color, spec, innerW, innerH);
+    // Multi mode keeps its country legend in sync with the drawn series.
     if (this.isMulti()) this.renderLegend(this.countries, color, innerW);
-    else this.clearLegend();
 
     if (this.lensState) {
       this.renderLensBandsInternal(x, yearRange, innerW, innerH);
     }
 
-    this.crosshair.setData(
-      x, y, innerH,
-      entries.map((e) => ({ label: e.country, color: color(e.country), points: e.points })),
-      spec.valueLabel,
-    );
+    const crosshairEntries: CrosshairEntry[] = entries.map((e) => ({
+      label: e.country,
+      color: color(e.country),
+      points: e.points,
+    }));
+    if (gdpEntry) crosshairEntries.push(gdpEntry);
+    this.crosshair.setData(x, y, innerH, crosshairEntries, spec.valueLabel);
 
     // Update label in single mode
     if (!this.isMulti()) {
@@ -500,6 +511,117 @@ export class EmissionsChart {
 
   private clearLegend(): void {
     this.group('legend').selectAll('*').remove();
+  }
+
+  /**
+   * Single-country only: overlays a GDP-per-capita line on a secondary right
+   * axis. GDP/cap is derived (gdp / population) — no precomputed column exists.
+   * Clears itself in multi mode or when the country lacks GDP data.
+   */
+  private renderGdpOverlay(
+    x: LinearScale,
+    color: (c: string) => string,
+    spec: { label: string },
+    innerW: number,
+    innerH: number,
+  ): CrosshairEntry | null {
+    const country = !this.isMulti() ? this.countries[0] : undefined;
+    const series = country ? this.dataset.series(country) : undefined;
+    const points = series
+      ? resolveSeriesBy(series, this.state.yearRange(), getGdpPerCapita)
+      : [];
+    if (points.length === 0) {
+      this.clearGdpOverlay();
+      return null;
+    }
+
+    const max = Math.max(...points.map((p) => p.value));
+    const yR = scaleLinear().domain([0, max || 1]).nice().range([innerH, 0]);
+
+    this.group('y-axis-right')
+      .attr('transform', `translate(${innerW},0)`)
+      .style('color', GDP_COLOR)
+      .transition().duration(400)
+      .call(axisRight(yR).ticks(5).tickFormat((d) => GDP_FORMAT(Number(d))));
+
+    this.group('y-title-right')
+      .selectAll<SVGTextElement, string>('text')
+      .data(['GDP per capita (int-$)'])
+      .join('text')
+      .attr('transform', `translate(${innerW + MARGIN.right - 14},${innerH / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .attr('fill', GDP_COLOR)
+      .attr('font-size', '11px')
+      .text((d) => d);
+
+    const generator = line<DataPoint>().x((p) => x(p.year)).y((p) => yR(p.value));
+    this.group('gdp-line')
+      .selectAll<SVGPathElement, DataPoint[]>('path.gdp-line')
+      .data([points])
+      .join('path')
+      .attr('class', 'gdp-line')
+      .attr('fill', 'none')
+      .attr('stroke', GDP_COLOR)
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '5 3')
+      .attr('d', (d) => generator(d) ?? '');
+
+    this.renderSingleLegend(country!, color, spec.label);
+
+    // Surfaced in the hover tooltip on its own scale/format alongside the CO₂ value.
+    return {
+      label: 'GDP per capita',
+      color: GDP_COLOR,
+      points,
+      yScale: yR,
+      format: GDP_TOOLTIP_FORMAT,
+    };
+  }
+
+  private clearGdpOverlay(): void {
+    this.group('y-axis-right').selectAll('*').remove();
+    this.group('y-title-right').selectAll('*').remove();
+    this.group('gdp-line').selectAll('*').remove();
+    this.group('legend').selectAll('*').remove();
+  }
+
+  /** Compact two-row key identifying the CO₂ (country color) and GDP lines. */
+  private renderSingleLegend(
+    country: string,
+    color: (c: string) => string,
+    co2Label: string,
+  ): void {
+    const rows = [
+      { color: color(country), label: co2Label, dash: false },
+      { color: GDP_COLOR, label: 'GDP per capita', dash: true },
+    ];
+    this.group('legend')
+      .attr('transform', 'translate(8,0)')
+      .selectAll<SVGGElement, (typeof rows)[number]>('g.legend-row')
+      .data(rows, (d) => d.label)
+      .join('g')
+      .attr('class', 'legend-row')
+      .attr('transform', (_d, i) => `translate(0,${i * 18})`)
+      .call((row) => {
+        row
+          .selectAll<SVGLineElement, (typeof rows)[number]>('line.legend-swatch')
+          .data((d) => [d])
+          .join('line')
+          .attr('class', 'legend-swatch')
+          .attr('x1', 0).attr('y1', 5).attr('x2', 16).attr('y2', 5)
+          .attr('stroke', (d) => d.color)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', (d) => (d.dash ? '5 3' : null));
+        row
+          .selectAll<SVGTextElement, (typeof rows)[number]>('text.legend-label')
+          .data((d) => [d])
+          .join('text')
+          .attr('class', 'legend-label')
+          .attr('x', 22).attr('y', 9)
+          .attr('font-size', '12px')
+          .attr('fill', 'var(--text)')
+          .text((d) => d.label);
+      });
   }
 
   /** Removes all drawn series + legend when no country is selected. */
