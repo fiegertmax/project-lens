@@ -94,6 +94,8 @@ body {
   gap: 8px;
   padding: 8px 10px;
   background: var(--panel-bg);
+  cursor: pointer;
+  user-select: none;
 }
 
 .collapsible__title {

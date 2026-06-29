@@ -200,7 +200,10 @@ export class EmissionsChart {
   }
 
   update(): void {
-    if (this.countries.length === 0) return;
+    if (this.countries.length === 0) {
+      this.clearPlot();
+      return;
+    }
 
     const width = this.lineCell.node()!.clientWidth || 600;
     const innerW = width - MARGIN.left - MARGIN.right;
@@ -228,7 +231,10 @@ export class EmissionsChart {
 
     this.renderAxes(x, y, innerH, spec);
     this.renderLines(entries, x, y, color, innerW, innerH);
+    // A single-country chart never shows a legend; multi mode keeps it in sync
+    // with the countries actually drawn (and their current colors).
     if (this.isMulti()) this.renderLegend(this.countries, color, innerW);
+    else this.clearLegend();
 
     if (this.lensState && this.lensSync) {
       this.renderLensBandsInternal(x, yearRange, innerW, innerH);
@@ -501,6 +507,18 @@ export class EmissionsChart {
       })
       .on('mouseover', (_event, d) => this.highlight(d))
       .on('mouseout', () => this.clearHighlight());
+  }
+
+  private clearLegend(): void {
+    this.group('legend').selectAll('*').remove();
+  }
+
+  /** Removes all drawn series + legend when no country is selected. */
+  private clearPlot(): void {
+    this.group('lines').selectAll('path.emissions-line').remove();
+    this.group('drag-overlays').selectAll('path.emissions-line-hit').remove();
+    this.group('empty').selectAll('text').remove();
+    this.clearLegend();
   }
 
   private renderEmptyNotice(entries: SeriesEntry[], innerW: number, innerH: number): void {

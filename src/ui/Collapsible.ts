@@ -23,6 +23,11 @@ export class Collapsible {
     label.className = 'collapsible__title';
     label.textContent = title;
 
+    header.addEventListener('dblclick', (e) => {
+      // Only trigger if not clicking the toggle button itself (it handles single click)
+      if (e.target !== this.toggle) this.setCollapsed(!this.collapsed);
+    });
+
     header.append(this.toggle, label);
 
     this.body = document.createElement('div');
