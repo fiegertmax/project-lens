@@ -166,7 +166,12 @@ export class AiResearchPanel {
   /** Splits the model's markdown bullet output into list items with inline formatting. */
   private renderBullets(text: string): Node[] {
     if (!text) return [];
-    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    // Only keep lines that are actual bullet items — drops any pre-search narration
+    // the model may emit before calling web_search (e.g. "I will research this…").
+    const lines = text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => /^[-*]\s/.test(l));
     const list = document.createElement('ul');
     list.className = 'ai-research-panel__list';
     for (const line of lines) {
@@ -184,7 +189,9 @@ export class AiResearchPanel {
    * can't inject markup.
    */
   private appendInlineMarkdown(parent: HTMLElement, text: string): void {
-    const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)|(?:\*([^*]+)\*|_([^_]+)_)/g;
+    // URL segment allows one level of balanced parens so Wikipedia-style URLs
+    // like /wiki/Coal_(fuel) are captured in full rather than truncated.
+    const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(((?:[^)(\s]|\([^)]*\))+)\)|(?:\*([^*]+)\*|_([^_]+)_)/g;
     let last = 0;
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(text)) !== null) {

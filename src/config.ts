@@ -110,27 +110,36 @@ export const CO2_SOURCES = [
 export const AI_RESEARCH = {
   /** Web research must run on Haiku. */
   model: 'claude-haiku-4-5',
-  /** Keeps the answer short (a handful of bullets). */
-  maxTokens: 900,
+  /** Higher ceiling to fit per-factor bullets with inline URL citations. */
+  maxTokens: 1500,
   /** Changes smaller than this (|%|) are treated as noise and never researched. */
   minChangePct: 5,
   /** Server-side web search tool — older version chosen for Haiku compatibility. */
-  webSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+  webSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 6 },
 
   system: [
     'You are an expert climate-data research assistant embedded in a CO₂ emissions visualization.',
     "A user is inspecting how ONE country's absolute CO₂ emissions changed over a specific period, broken down by source.",
     'Your job: explain WHY the emissions changed, grounded in real, verifiable events.',
     '',
-    'Rules:',
-    '- Use web search to find real, country-specific causes (policies, power-plant openings/closures, economic shifts, wars, deforestation programs, political changes, etc.).',
-    "- Only discuss the emission factors listed in the user's message. Never introduce factors that are not on display.",
-    '- Tie each point to a concrete year or short year range inside the period.',
-    '- Prefer country-specific causes (named governments, regions, industries, rainforests, parties).',
-    '- Ignore minor fluctuations: only explain changes of roughly 5% or more.',
-    '- Keep it short: 3–6 concise bullet points, one cause each. No intro or closing paragraph.',
-    '- Each bullet ≤ 2 sentences and starts with the relevant year(s) in brackets, e.g. "[2011–2013]".',
-    '- If you are genuinely unsure, say so briefly rather than inventing specifics.',
+    '=== STRICT OUTPUT CONTRACT ===',
+    'Your ENTIRE response must be ONLY a markdown bullet list. No preamble, no "I will research", no conclusions.',
+    'FIRST CHARACTER of your response must be "-" (the start of the first bullet). Nothing before it.',
+    '',
+    'One bullet per factor, in EXACTLY the order the factors appear in the user message. Do not reorder.',
+    'Each bullet format: "- **FactorName**: <explanation with citations>"',
+    '',
+    'Citations are MANDATORY: every distinct claim inside a bullet MUST end with a Markdown link [Source Title](URL).',
+    'Use the exact URLs returned by web_search. Never invent or omit URLs.',
+    'PERIOD CONSTRAINT: every cause you research and cite MUST have occurred within the Period stated in the user message. Causes from before or after that period are irrelevant and MUST NOT appear.',
+    'Do NOT mention years or time ranges in the bullet text.',
+    '=== END CONTRACT ===',
+    '',
+    'Research guidance:',
+    '- Use web_search to find real, country-specific causes (policies, plant openings/closures, economic shifts, deforestation programmes, etc.).',
+    "- Only discuss factors listed in the user's message.",
+    '- Prefer country-specific causes (named governments, regions, industries, parties).',
+    '- If genuinely unsure about a factor, say so briefly.',
   ].join('\n'),
 
   // One worked example pins the output format; the real request reuses the same shape.
@@ -139,15 +148,15 @@ export const AI_RESEARCH = {
     'Period: 2000–2015',
     'Land use change: excluded',
     'Factors that changed materially on the chart:',
+    '- Cement: +120%',
     '- Coal: +38%',
     '- Oil: -12%',
-    '- Cement: +120%',
     'Research the real-world causes behind these changes.',
   ].join('\n'),
   exampleAssistant: [
-    "- [2001–2007] Examplia's coal use climbed as three new lignite power stations in the eastern Karst region came online to meet booming industrial demand.",
-    '- [2004 onward] A nationwide construction boom under the Capital Expansion Act roughly doubled cement output, the dominant driver of the cement-CO₂ rise.',
-    '- [2009–2012] Oil emissions fell after fuel-subsidy reform and the Metro-North transit rollout cut urban road-transport demand.',
+    "- **Cement**: The Capital Expansion Act opened infrastructure funding to private developers, roughly doubling domestic cement output. [World Cement Association](https://worldcement.com/examplia-expansion) The government's state-housing programme further sustained demand as millions of new dwellings were built across the eastern provinces. [Examplia Housing Ministry](https://housing.gov.ex/programmes)",
+    "- **Coal**: Three lignite power stations were commissioned in Examplia's eastern Karst region to supply electricity for the booming industrial belt. [Examplia Energy Agency](https://energy.gov.ex/coal-capacity)",
+    '- **Oil**: A nationwide fuel-subsidy reform raised petrol prices significantly. [Ministry of Finance](https://finance.gov.ex/subsidy-reform) The Metro-North transit rollout further reduced urban road-transport demand. [Examplia Ministry of Transport](https://transport.gov.ex/metro-north)',
   ].join('\n'),
 } as const;
 

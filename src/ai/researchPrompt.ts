@@ -22,6 +22,7 @@ function userMessage(ctx: TrendContext): string {
     `Land use change: ${ctx.includeLUC ? 'included' : 'excluded'}`,
     'Factors that changed materially on the chart:',
     ...ctx.factors.map((f) => factorLine(f.label, f.pctChange)),
+    `Only explain causes that occurred within ${ctx.startYear}–${ctx.endYear}. Causes outside this period must not appear.`,
     'Research the real-world causes behind these changes.',
   ].join('\n');
 }
